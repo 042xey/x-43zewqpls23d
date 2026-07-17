@@ -1,5 +1,6 @@
 packages:
   - artifacts/*
+  - artifacts/Admin-p/*
   - lib/*
   - lib/integrations/*
   - scripts

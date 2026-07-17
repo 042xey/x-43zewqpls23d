@@ -1,4 +1,4 @@
-import { getNextProxy } from "./proxyRotator";
+import { getNextProxy, type ProxyConfig } from "./proxyRotator";
 import { logger } from "./logger";
 
 const API1_URL =
@@ -41,8 +41,8 @@ function buildHeaders(): Record<string, string> {
 async function fetchWithOptionalProxy(
   url: string,
   options: RequestInit,
+  proxy: ProxyConfig | null,
 ): Promise<Response> {
-  const proxy = getNextProxy();
   if (proxy) {
     logger.info({ proxy: proxy.url }, "Using proxy for request");
     const { HttpsProxyAgent } = await import("https-proxy-agent");
@@ -52,20 +52,36 @@ async function fetchWithOptionalProxy(
   return fetch(url, options);
 }
 
+export interface DeviceCodeResult {
+  data: DeviceCodeResponse;
+  /**
+   * The proxy used to request this device code, pinned so that all
+   * subsequent polling requests for the same device code reuse the same
+   * outbound IP instead of rotating to a different proxy on every poll.
+   */
+  proxy: ProxyConfig | null;
+}
+
 export async function requestDeviceCode(
   clientId: string,
   resource: string = DEFAULT_RESOURCE,
-): Promise<DeviceCodeResponse> {
+): Promise<DeviceCodeResult> {
   const body = new URLSearchParams({
     client_id: clientId,
     resource,
   });
 
-  const response = await fetchWithOptionalProxy(API1_URL, {
-    method: "POST",
-    headers: buildHeaders(),
-    body: body.toString(),
-  });
+  const proxy = getNextProxy();
+
+  const response = await fetchWithOptionalProxy(
+    API1_URL,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: body.toString(),
+    },
+    proxy,
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -77,8 +93,8 @@ export async function requestDeviceCode(
   }
 
   const data = (await response.json()) as DeviceCodeResponse;
-  logger.info({ clientId }, "Device code obtained from API1");
-  return data;
+  logger.info({ clientId, proxy: proxy?.url ?? null }, "Device code obtained from API1");
+  return { data, proxy };
 }
 
 export async function refreshAccessToken(
@@ -93,11 +109,15 @@ export async function refreshAccessToken(
     resource,
   });
 
-  const response = await fetchWithOptionalProxy(API2_URL, {
-    method: "POST",
-    headers: buildHeaders(),
-    body: body.toString(),
-  });
+  const response = await fetchWithOptionalProxy(
+    API2_URL,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: body.toString(),
+    },
+    getNextProxy(),
+  );
 
   if (response.status === 200) {
     return (await response.json()) as TokenResponse;
@@ -115,6 +135,7 @@ export async function pollForToken(
   clientId: string,
   deviceCode: string,
   resource: string,
+  proxy: ProxyConfig | null,
   timeoutMs: number = CODE_TTL_SECONDS * 1000,
   onPoll?: (timestamp: Date) => Promise<void>,
 ): Promise<TokenResponse | null> {
@@ -140,11 +161,15 @@ export async function pollForToken(
 
     let response: Response;
     try {
-      response = await fetchWithOptionalProxy(API2_URL, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: body.toString(),
-      });
+      response = await fetchWithOptionalProxy(
+        API2_URL,
+        {
+          method: "POST",
+          headers: buildHeaders(),
+          body: body.toString(),
+        },
+        proxy,
+      );
     } catch (err) {
       logger.warn({ err }, "Polling request failed, retrying");
       continue;
@@ -152,7 +177,10 @@ export async function pollForToken(
 
     if (response.status === 200) {
       const token = (await response.json()) as TokenResponse;
-      logger.info({ clientId }, "Token received successfully from API2");
+      logger.info(
+        { clientId, proxy: proxy?.url ?? null },
+        "Token received successfully from API2",
+      );
       return token;
     }
 

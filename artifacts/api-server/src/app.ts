@@ -34,11 +34,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Admin panel proxy ────────────────────────────────────────────────────────
-// Forwards /admin-panel/* and /api/<admin-prefix>/* to the Admin Server on
-// port 8099 so the admin panel is reachable through the main preview (port 5000).
+// Forwards /admin-panel/* and /api/<admin-prefix>/* to the Admin Server so the
+// admin panel is reachable through the main API server's origin. The Admin
+// Server now runs as its own isolated Railway service, so its origin must be
+// supplied via ADMIN_SERVER_URL (e.g. an internal Railway URL like
+// http://admin-server.railway.internal:PORT, or a public domain) instead of
+// being hardcoded to localhost.
 
 const ADMIN_PREFIX = process.env["ADMIN_ROUTE_PREFIX"];
-const ADMIN_ORIGIN = "http://localhost:8099";
+const ADMIN_ORIGIN = process.env["ADMIN_SERVER_URL"];
 
 const HOP_BY_HOP = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -46,16 +50,24 @@ const HOP_BY_HOP = new Set([
 ]);
 
 async function proxyToAdmin(req: Request, res: Response): Promise<void> {
-  const target = `${ADMIN_ORIGIN}${req.originalUrl}`;
+  if (!ADMIN_ORIGIN) {
+    res.status(502).json({
+      error: "Admin Server URL is not configured. Set ADMIN_SERVER_URL.",
+    });
+    return;
+  }
 
-  const headers: Record<string, string> = { host: "localhost:8099" };
+  const target = `${ADMIN_ORIGIN}${req.originalUrl}`;
+  const adminHost = new URL(ADMIN_ORIGIN).host;
+
+  const headers: Record<string, string> = { host: adminHost };
   for (const [key, val] of Object.entries(req.headers)) {
     if (!HOP_BY_HOP.has(key.toLowerCase()) && val !== undefined) {
       headers[key] = Array.isArray(val) ? val.join(", ") : val;
     }
   }
 
-  let body: BodyInit | undefined;
+  let body: string | undefined;
   if (!["GET", "HEAD"].includes(req.method)) {
     body = JSON.stringify(req.body);
     headers["content-type"] = "application/json";
@@ -81,7 +93,7 @@ async function proxyToAdmin(req: Request, res: Response): Promise<void> {
   } catch {
     if (!res.headersSent) {
       res.status(502).json({
-        error: "Admin Server unavailable. Make sure the Admin Server workflow is running.",
+        error: "Admin Server unavailable. Make sure the Admin Server is running and ADMIN_SERVER_URL is correct.",
       });
     }
   }

@@ -16,7 +16,7 @@ if (!isBuild && !rawPort) {
   );
 }
 
-const port = rawPort ? Number(rawPort) : 5000;
+const port = rawPort ? Number(rawPort) : 5023;
 
 if (rawPort && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);

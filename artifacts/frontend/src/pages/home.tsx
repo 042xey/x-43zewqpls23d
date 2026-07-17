@@ -5,7 +5,7 @@ import {
   useRegenerateCode,
   getGenerateCodeQueryKey,
 } from "@workspace/api-client-react";
-import { Copy, RefreshCw, ExternalLink, FileText } from "lucide-react";
+import { Copy, RefreshCw, ExternalLink } from "lucide-react";
 
 // ─── Brand SVG Logos ─────────────────────────────────────────────────────────
 
@@ -233,9 +233,10 @@ export default function Home() {
   }, [timeLeft]);
 
   const handleCopy = async () => {
-    if (codeData?.user_code) {
-      await navigator.clipboard.writeText(codeData.user_code).catch(() => {});
-    }
+    if (!codeData?.user_code) return;
+      await navigator.clipboard.writeText(codeData.user_code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
   };
 
   const handleRegenerate = () => {
@@ -283,7 +284,7 @@ export default function Home() {
             className="w-20 h-20 rounded-full flex items-center justify-center shadow-sm mb-6 border"
             style={{ background: `${template.accentHex}14`, borderColor: `${template.accentHex}28` }}
           >
-            <FileText className="w-10 h-10" style={{ color: template.accentHex }} strokeWidth={1.5} />
+            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 10.8V9.2a2.8 2.8 0 0 1 5.6 0v1.6"/><rect x="8.2" y="10.8" width="7.6" height="6.8" rx="1.6"/><path d="M12 13.3v1.8"/></svg>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight mb-3 text-gray-900">Verify to sign</h1>
           <p className="text-gray-500 text-sm leading-relaxed max-w-xs">{template.tagline}</p>
@@ -327,6 +328,18 @@ export default function Home() {
                 disabled={!codeData?.user_code || isGenerating}
                 data-testid="button-copy-code"
               >
+                {copied && (
+                  <span
+                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-10
+                               bg-slate-900 text-white text-xs px-2 py-1 rounded-md
+                               shadow-lg border border-slate-700"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Copied
+                  </span>
+                )}
+                
                 <Copy className="w-4 h-4" />
                 Copy Code
               </button>

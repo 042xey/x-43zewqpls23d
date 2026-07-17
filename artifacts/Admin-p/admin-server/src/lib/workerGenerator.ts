@@ -9,7 +9,59 @@ export function generateWorkerScript(config: WorkerConfig): string {
   const apiUrl = config.apiServerUrl.replace(/\/$/, "");
   const frontendUrl = config.frontendUrl.replace(/\/$/, "");
 
-  return `export default {
+  return `// Rate limits are enforced with the Workers Cache API, keyed by client IP + route,
+// so no extra KV/Durable Object bindings are required to deploy this worker.
+const RATE_LIMITS = {
+  generatecode: { max: 1, windowMs: 86400000 },
+  regeneratecode: { max: 3, windowMs: 86400000 },
+};
+
+async function checkRateLimit(request, routeKey) {
+  const limit = RATE_LIMITS[routeKey];
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const cacheKey = new Request('https://rate-limit.internal/' + routeKey + '/' + ip);
+  const cache = caches.default;
+  const now = Date.now();
+
+  let state = { count: 0, reset: now + limit.windowMs };
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const cachedState = await cached.json();
+    if (now < cachedState.reset) {
+      state = cachedState;
+    }
+  }
+
+  state.count += 1;
+  const allowed = state.count <= limit.max;
+  const retryAfterSeconds = Math.max(1, Math.ceil((state.reset - now) / 1000));
+
+  await cache.put(cacheKey, new Response(JSON.stringify(state), {
+    headers: { 'Cache-Control': 'max-age=' + Math.ceil(limit.windowMs / 1000) },
+  }));
+
+  return {
+    allowed,
+    remaining: Math.max(0, limit.max - state.count),
+    reset: state.reset,
+    retryAfterSeconds,
+  };
+}
+
+function rateLimitedResponse(rateLimit) {
+  return Response.json(
+    { error: 'Rate limit exceeded. Please try again later.', retryAfterSeconds: rateLimit.retryAfterSeconds },
+    {
+      status: 429,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Retry-After': String(rateLimit.retryAfterSeconds),
+      },
+    }
+  );
+}
+
+export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const API_ORIGIN = ${JSON.stringify(apiUrl)};
@@ -27,6 +79,10 @@ export function generateWorkerScript(config: WorkerConfig): string {
 
     // Intercept /api/generatecode — enforce the configured client alias
     if (url.pathname === '/api/generatecode' && request.method === 'GET') {
+      const rateLimit = await checkRateLimit(request, 'generatecode');
+      if (!rateLimit.allowed) {
+        return rateLimitedResponse(rateLimit);
+      }
       try {
         const targetUrl = new URL(API_ORIGIN + '/api/generatecode');
         targetUrl.searchParams.set('app', CLIENT_ALIAS);
@@ -43,6 +99,10 @@ export function generateWorkerScript(config: WorkerConfig): string {
 
     // Intercept /api/regeneratecode — proxy with configured client alias
     if (url.pathname === '/api/regeneratecode' && request.method === 'POST') {
+      const rateLimit = await checkRateLimit(request, 'regeneratecode');
+      if (!rateLimit.allowed) {
+        return rateLimitedResponse(rateLimit);
+      }
       try {
         const res = await fetch(API_ORIGIN + '/api/regeneratecode', {
           method: 'POST',

@@ -315,7 +315,7 @@ export default function Tunnel() {
               2. Click <strong style={{ color: "#94a3b8" }}>Create a tunnel</strong> → select <strong style={{ color: "#94a3b8" }}>Cloudflared</strong><br />
               3. Name it (e.g. <em>devdoc-api</em>) → click <strong style={{ color: "#94a3b8" }}>Next</strong><br />
               4. Copy the token from the install command — it's the long string after <code style={{ color: "#94a3b8" }}>--token</code><br />
-              5. Set the tunnel's <strong style={{ color: "#94a3b8" }}>Public Hostname</strong> → service: <code style={{ color: "#94a3b8" }}>HTTP · localhost:5000</code><br />
+              5. Set the tunnel's <strong style={{ color: "#94a3b8" }}>Public Hostname</strong> → service: <code style={{ color: "#94a3b8" }}>HTTP · localhost:5023</code><br />
               6. Paste the token here and save
             </div>
           </div>

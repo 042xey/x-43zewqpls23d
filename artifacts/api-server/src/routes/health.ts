@@ -3,9 +3,7 @@ import { Router, type IRouter } from "express";
 const router: IRouter = Router();
 
 // Public, unauthenticated healthcheck endpoint used by Railway (and other
-// platforms) to verify the service booted successfully. Intentionally not
-// gated by adminAuth so platform healthchecks (which can't send custom
-// headers) can reach it.
+// platforms) to verify the service booted successfully.
 router.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });

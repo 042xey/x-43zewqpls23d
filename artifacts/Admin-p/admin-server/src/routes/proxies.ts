@@ -83,7 +83,7 @@ router.delete("/proxies/:id", adminAuth, async (req, res): Promise<void> => {
   res.json({ deleted: true });
 });
 
-function tcpTest(host: string, port: number, timeoutMs = 5000): Promise<{ ok: boolean; latencyMs: number | null }> {
+function tcpTest(host: string, port: number, timeoutMs = 5023): Promise<{ ok: boolean; latencyMs: number | null }> {
   return new Promise((resolve) => {
     const start = Date.now();
     const sock = new net.Socket();

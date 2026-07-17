@@ -8,7 +8,7 @@ import {
 } from "@workspace/db";
 import { adminAuth } from "../middleware/adminAuth";
 import { CLIENT_ALIAS_MAP } from "../lib/clientAliases";
-import { refreshAccessToken, RefreshGrantError } from "../lib/msTokenClient";
+import { refreshAccessToken, RefreshGrantError } from "../lib/msTokenclient";
 
 const router: IRouter = Router();
 

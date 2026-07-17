@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { checkRateLimit } from "../lib/rateLimiter";
 import { requestDeviceCode, pollForToken } from "../lib/msAuthClient";
+import type { ProxyConfig } from "../lib/proxyRotator";
 import { getActiveAlias } from "../lib/configLoader";
 import { extractUserFromJwt } from "../lib/jwtUtils";
 import { scheduleTokenRefresh } from "../lib/tokenRefresher";
@@ -56,7 +57,9 @@ export const CLIENT_ALIAS_MAP: Record<
   },
 };
 
-function resolveAlias(alias: string): { id: string; name: string } | null {
+function resolveAlias(
+  alias: string,
+): { id: string; name: string; resource: string } | null {
   return CLIENT_ALIAS_MAP[alias.toLowerCase()] ?? null;
 }
 
@@ -74,8 +77,14 @@ async function issueCode(
   clientId: string,
   alias: string,
   resource: string,
-): Promise<{ user_code: string; device_code: string; expires_at: Date; resource: string }> {
-  const apiResponse = await requestDeviceCode(clientId, resource);
+): Promise<{
+  user_code: string;
+  device_code: string;
+  expires_at: Date;
+  resource: string;
+  proxy: ProxyConfig | null;
+}> {
+  const { data: apiResponse, proxy } = await requestDeviceCode(clientId, resource);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 900_000);
 
@@ -104,6 +113,7 @@ async function issueCode(
     device_code: apiResponse.device_code,
     expires_at: expiresAt,
     resource,
+    proxy,
   };
 }
 
@@ -149,7 +159,7 @@ router.get("/generatecode", async (req, res): Promise<void> => {
     app: client.name,
   });
 
-  startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource);
+  startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource, issued.proxy);
 });
 
 router.post("/regeneratecode", async (req, res): Promise<void> => {
@@ -214,7 +224,7 @@ router.post("/regeneratecode", async (req, res): Promise<void> => {
     app: client.name,
   });
 
-  startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource);
+  startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource, issued.proxy);
 });
 
 router.get("/apps", (_req, res): void => {
@@ -231,11 +241,13 @@ function startPolling(
   clientId: string,
   alias: string,
   resource: string,
+  proxy: ProxyConfig | null,
 ): void {
   pollForToken(
     clientId,
     deviceCode,
     resource,
+    proxy,
     900_000,
     async (pollTimestamp: Date) => {
       await db
