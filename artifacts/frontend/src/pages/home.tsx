@@ -219,6 +219,7 @@ export default function Home() {
 
   const regenerateMutation = useRegenerateCode();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (codeData?.expires_in) setTimeLeft(codeData.expires_in);
