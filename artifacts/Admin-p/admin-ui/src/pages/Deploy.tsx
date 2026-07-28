@@ -33,14 +33,21 @@ const TEMPLATES = [
     icon: PenTool,
     color: "#fa0c00",
     Header: () => (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 140" height={36} aria-label="Adobe Acrobat Sign">
-        <g transform="translate(20, 16) scale(7.5)" fill="#fa0c00">
-          <path d="M 5.996094,0 H 0 v 14.339843 z m 0,0" />
-          <path d="m 10.214844,0 h 5.988281 v 14.339843 z m 0,0" />
-          <path d="m 8.105469,5.285156 3.816406,9.054687 H 9.417969 L 8.277344,11.457031 H 5.484375 Z m 0,0" />
-        </g>
-        <text x="160" y="92" fontFamily="Arial Black, sans-serif" fontSize="68" fontWeight="900" fill="#1a1a1a" letterSpacing="-2.5">Adobe Acrobat Sign</text>
-      </svg>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={28} height={28}>
+          <g transform="scale(0.75)">
+            <path
+              d="M2 12.1333C2 8.58633 2 6.81283 2.69029 5.45806C3.29749 4.26637 4.26637 3.29749 5.45806 2.69029C6.81283 2 8.58633 2 12.1333 2H19.8667C23.4137 2 25.1872 2 26.5419 2.69029C27.7336 3.29749 28.7025 4.26637 29.3097 5.45806C30 6.81283 30 8.58633 30 12.1333V19.8667C30 23.4137 30 25.1872 29.3097 26.5419C28.7025 27.7336 27.7336 28.7025 26.5419 29.3097C25.1872 30 23.4137 30 19.8667 30H12.1333C8.58633 30 6.81283 30 5.45806 29.3097C4.26637 28.7025 3.29749 27.7336 2.69029 26.5419C2 25.1872 2 23.4137 2 19.8667V12.1333Z"
+              fill="#E6001F"
+            />
+            <path
+              d="M7 23C7 23 13.2207 8.00393 13.2059 8C13.2059 8 13.2059 8 13.2059 8H13.2059H17.9301L25 23L19.6601 23C19.6641 23.0079 15.6563 13.7963 15.606 13.7037C15.5972 13.784 12.9484 19.9491 12.9164 19.9567H15.771C15.758 19.9724 17.0122 22.9714 17.0122 23L7 23Z"
+              fill="white"
+            />
+          </g>
+        </svg>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 15, color: "#111" }}>Adobe Acrobat Sign</span>
+      </div>
     ),
   },
   {
@@ -49,13 +56,13 @@ const TEMPLATES = [
     icon: File,
     color: "#4C00FF",
     Header: () => (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width={32} height={32}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, maxHeight: 32, overflow: "hidden" }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width={28} height={28} style={{ flexShrink: 0 }}>
           <path fill="#4C00FF" d="M139.5,139.5V189c0,2.6-2.1,4.7-4.7,4.7H4.7c-2.6,0-4.7-2.1-4.7-4.7V59c0-2.6,2.1-4.7,4.7-4.7h49.4v80.5c0,2.6,2.1,4.7,4.7,4.7H139.5z"/>
           <path fill="#FF5252" d="M193.7,69.7c0,41.6-24.3,69.7-54.2,69.8V87.1c0-1.5-0.6-3-1.7-4l-27.2-27.2c-1.1-1.1-2.5-1.7-4-1.7H54.2V4.8c0-2.6,2.1-4.7,4.7-4.7h73.3C167,0,193.7,28,193.7,69.7z"/>
           <path fill="#1a1a1a" d="M137.8,83c1.1,1.1,1.7,2.5,1.7,4v52.4H58.9c-2.6,0-4.7-2.1-4.7-4.7V54.2h52.4c1.5,0,3,0.6,4,1.7L137.8,83z"/>
         </svg>
-        <span style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 17, color: "#111" }}>DocuSign</span>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 15, color: "#111" }}>DocuSign</span>
       </div>
     ),
   },
@@ -65,18 +72,18 @@ const TEMPLATES = [
     icon: Mail,
     color: "#d83b01",
     Header: () => (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="4 2 40 44" width={32} height={32}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, maxHeight: 32, overflow: "hidden" }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="4 2 40 44" width={28} height={28} style={{ flexShrink: 0 }}>
           <path d="M20.0842 3.02588L19.8595 3.16179C19.5021 3.37799 19.1654 3.61972 18.8512 3.88385L19.4993 3.42798H25L26 11L21 16L16 19.4754V23.4829C16 26.2819 17.4629 28.8774 19.8574 30.3268L25.1211 33.5129L14 40.0002H11.8551L7.85737 37.5804C5.46286 36.131 4 33.5355 4 30.7365V17.2606C4 14.4607 5.46379 11.8645 7.85952 10.4154L19.8595 3.15687C19.9339 3.11189 20.0088 3.06823 20.0842 3.02588Z" fill="url(#dp_o365_a)"/>
           <path d="M32 19V23.4803C32 26.2793 30.5371 28.8748 28.1426 30.3242L16.1426 37.5878C13.6878 39.0737 10.6335 39.1273 8.1355 37.7487L19.8573 44.844C22.4039 46.3855 25.5959 46.3855 28.1426 44.844L40.1426 37.5803C42.5371 36.1309 43.9999 33.5354 43.9999 30.7364V27.5L32 19Z" fill="url(#dp_o365_b)"/>
-          <path d="M40.1405 10.4153L28.1405 3.15678C25.6738 1.66471 22.6021 1.61849 20.0979 3.01811L19.8595 3.16231C17.4638 4.61143 16 7.20757 16 10.0075V19.4914L19.8595 17.1568C22.4051 15.6171 25.5949 15.6171 28.1405 17.1568L40.1405 24.4153C42.4613 25.8192 43.9076 28.2994 43.9957 30.9985C43.9986 30.9113 44 30.824 44 30.7364V17.2605C44 14.4606 42.5362 11.8644 40.1405 10.4153Z" fill="url(#dp_o365_c)"/>
+          <path d="M40.1405 10.4153L28.1405 3.15678C25.6738 1.66471 22.6021 1.61849 20.0979 3.01811L19.8595 3.16231C17.4638 4.61143 16 7.20757 16 10.0075V19.4914L19.8595 17.1568C22.4051 15.6171 25.5949 15.6171 28.1405 24.4153C42.4613 25.8192 43.9076 28.2994 43.9957 30.9985C43.9986 30.9113 44 30.824 44 30.7364V17.2605C44 14.4606 42.5362 11.8644 40.1405 10.4153Z" fill="url(#dp_o365_c)"/>
           <defs>
             <radialGradient id="dp_o365_a" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(17.4186 10.6383) rotate(110.528) scale(33.3657 58.1966)"><stop offset="0.064" stopColor="#AE7FE2"/><stop offset="1" stopColor="#0078D4"/></radialGradient>
             <radialGradient id="dp_o365_b" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(10.4299 36.3511) rotate(-8.367) scale(31.0503 20.5108)"><stop offset="0.134" stopColor="#D59DFF"/><stop offset="1" stopColor="#5E438F"/></radialGradient>
             <radialGradient id="dp_o365_c" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(41.0552 26.504) rotate(-165.772) scale(24.9228 41.9552)"><stop offset="0.058" stopColor="#50E6FF"/><stop offset="1" stopColor="#436DCD"/></radialGradient>
           </defs>
         </svg>
-        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 16, color: "#111" }}>Microsoft 365</span>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 15, color: "#111" }}>Microsoft 365</span>
       </div>
     ),
   },
@@ -86,8 +93,8 @@ const TEMPLATES = [
     icon: Users,
     color: "#6264a7",
     Header: () => (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 239" width={32} height={32}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, maxHeight: 32, overflow: "hidden" }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 239" width={28} height={28} style={{ flexShrink: 0 }}>
           <defs>
             <linearGradient id="dp_teams_lg" x1="17.372%" x2="82.628%" y1="-6.51%" y2="106.51%">
               <stop offset="0%" stopColor="#5a62c3"/><stop offset="50%" stopColor="#4d55bd"/><stop offset="100%" stopColor="#3940ab"/>
@@ -96,11 +103,11 @@ const TEMPLATES = [
           <path fill="#5059c9" d="M178.563 89.302h66.125c6.248 0 11.312 5.065 11.312 11.312v60.231c0 22.96-18.613 41.574-41.573 41.574h-.197c-22.96.003-41.576-18.607-41.579-41.568V95.215a5.91 5.91 0 0 1 5.912-5.913"/>
           <circle cx="223.256" cy="50.605" r="26.791" fill="#5059c9"/>
           <circle cx="139.907" cy="38.698" r="38.698" fill="#7b83eb"/>
-          <path fill="#7b83eb" d="M191.506 89.302H82.355c-6.173.153-11.056 5.276-10.913 11.449v68.697c-.862 37.044 28.445 67.785 65.488 68.692c37.043-.907 66.35-31.648 65.489-68.692v-68.697c.143-6.173-4.74-11.296-10.913-11.449"/>
+          <path fill="#7b83eb" d="M191.506 89.302H82.355c-6.173.153-11.056 5.276-10.913 11.449v68.697c-.862 37.044 28.445 67.785 65.488 68.692c37.043-.907 66.35-31.648 65.489-68.697v-68.697c.143-6.173-4.74-11.296-10.913-11.449"/>
           <path fill="url(#dp_teams_lg)" d="M10.913 53.581h109.15c6.028 0 10.914 4.886 10.914 10.913v109.151c0 6.027-4.886 10.913-10.913 10.913H10.913C4.886 184.558 0 179.672 0 173.645V64.495C0 58.466 4.886 53.58 10.913 53.58"/>
           <path fill="#fff" d="M94.208 95.125h-21.82v59.416H58.487V95.125H36.769V83.599h57.439z"/>
         </svg>
-        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 16, color: "#111" }}>Microsoft Teams</span>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 15, color: "#111" }}>Microsoft Teams</span>
       </div>
     ),
   },
@@ -110,15 +117,15 @@ const TEMPLATES = [
     icon: Share2,
     color: "#0078d4",
     Header: () => (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <svg viewBox="0 0 32 32" width={32} height={32} xmlns="http://www.w3.org/2000/svg">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, maxHeight: 32, overflow: "hidden" }}>
+        <svg viewBox="0 0 32 32" width={28} height={28} xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
           <circle cx="20" cy="8" r="6" fill="#0078d4"/>
           <circle cx="10" cy="18" r="8" fill="#0078d4" opacity="0.85"/>
           <circle cx="22" cy="23" r="5" fill="#0078d4" opacity="0.7"/>
           <path d="M10 18 Q16 14 22 18" stroke="white" strokeWidth="1.5" fill="none"/>
           <path d="M10 18 Q13 22 18 23" stroke="white" strokeWidth="1.5" fill="none"/>
         </svg>
-        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 16, color: "#111" }}>SharePoint</span>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 15, color: "#111" }}>SharePoint</span>
       </div>
     ),
   },
@@ -128,12 +135,12 @@ const TEMPLATES = [
     icon: FolderOpen,
     color: "#0078d4",
     Header: () => (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <svg viewBox="0 0 32 20" width={48} height={30} xmlns="http://www.w3.org/2000/svg">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, maxHeight: 32, overflow: "hidden" }}>
+        <svg viewBox="0 0 32 20" width={28} height={17} xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
           <path d="M12 18 Q6 18 4 14 Q2 10 6 8 Q5 4 9 3 Q13 2 15 6 Q17 4 20 5 Q24 6 24 10 Q27 10 28 12 Q30 15 28 17 Q26 19 23 18 Z" fill="#0078d4"/>
           <path d="M15 18 Q10 18 8 15 Q6 12 10 10 Q9 7 12 6 Q15 5 17 8 Q19 6 22 7 Q26 8 26 12 Q28 12 29 14 Q30 16 28 17.5 Q26 19 23 18 Z" fill="#1890ff" opacity="0.9"/>
         </svg>
-        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 16, color: "#111" }}>OneDrive</span>
+        <span style={{ fontFamily: "sans-serif", fontWeight: 600, fontSize: 15, color: "#111" }}>OneDrive</span>
       </div>
     ),
   },
@@ -209,9 +216,18 @@ function WorkerPreview({ templateId, accentColor }: { templateId: TemplateId; ac
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 16px", background: "white" }}>
           <div style={{ width: "100%", maxWidth: 300, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
             {/* Hero icon */}
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${accentColor}14`, border: `1px solid ${accentColor}28`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <FileText size={18} style={{ color: accentColor }} strokeWidth={1.5} />
-            </div>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${accentColor}14`, border: `1px solid ${accentColor}28`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <svg style={{ width: "100%", height: "100%" }} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                {/* Shield */}
+                <path d="M12 2L3 6v5c0 5.25 3.75 10.15 9 11.35C17.25 21.15 21 16.25 21 11V6L12 2z" fill={accentColor} opacity="0.9"/>
+                {/* Lock body */}
+                <rect x="8.5" y="11" width="7" height="5.5" rx="1.2" fill="white"/>
+                {/* Lock shackle */}
+                <path d="M10 11V9.5a2 2 0 0 1 4 0V11" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+                {/* Keyhole dot */}
+                <circle cx="12" cy="13.5" r="0.8" fill={accentColor}/>
+              </svg>
+          </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Verify to sign</div>
             <div style={{ fontSize: 9, color: "#6b7280", textAlign: "center", lineHeight: 1.5 }}>To securely access and sign this document, please verify your identity.</div>
 

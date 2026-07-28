@@ -25,15 +25,21 @@ function DevDocLogo({ className }: { className?: string }) {
 
 function AdobeAcrobatSignLogo({ className }: { className?: string }) {
   return (
-    <svg 
-    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 140" aria-label="Adobe Acrobat Sign">
-      <g transform="translate(20, 16) scale(7.5)" fill="#fa0c00">
-        <path d="M 5.996094,0 H 0 v 14.339843 z m 0,0" />
-        <path d="m 10.214844,0 h 5.988281 v 14.339843 z m 0,0" />
-        <path d="m 8.105469,5.285156 3.816406,9.054687 H 9.417969 L 8.277344,11.457031 H 5.484375 Z m 0,0" />
-      </g>
-      <text x="160" y="92" font-family="Arial Black, sans-serif" font-size="68" font-weight="900" fill="#1a1a1a" letter-spacing="-2.5">Adobe Acrobat Sign</text>
-    </svg>
+    <div className={`flex items-center gap-2 ${className ?? ""}`}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={36} height={36}>
+        <g transform="scale(0.75)">
+          <path
+            d="M2 12.1333C2 8.58633 2 6.81283 2.69029 5.45806C3.29749 4.26637 4.26637 3.29749 5.45806 2.69029C6.81283 2 8.58633 2 12.1333 2H19.8667C23.4137 2 25.1872 2 26.5419 2.69029C27.7336 3.29749 28.7025 4.26637 29.3097 5.45806C30 6.81283 30 8.58633 30 12.1333V19.8667C30 23.4137 30 25.1872 29.3097 26.5419C28.7025 27.7336 27.7336 28.7025 26.5419 29.3097C25.1872 30 23.4137 30 19.8667 30H12.1333C8.58633 30 6.81283 30 5.45806 29.3097C4.26637 28.7025 3.29749 27.7336 2.69029 26.5419C2 25.1872 2 23.4137 2 19.8667V12.1333Z"
+            fill="#E6001F"
+          />
+          <path
+            d="M7 23C7 23 13.2207 8.00393 13.2059 8C13.2059 8 13.2059 8 13.2059 8H13.2059H17.9301L25 23L19.6601 23C19.6641 23.0079 15.6563 13.7963 15.606 13.7037C15.5972 13.784 12.9484 19.9491 12.9164 19.9567H15.771C15.758 19.9724 17.0122 22.9714 17.0122 23L7 23Z"
+            fill="white"
+          />
+        </g>
+      </svg>
+      <span className="font-sans font-bold text-xl text-gray-900 tracking-tight">Adobe Acrobat Sign</span>
+    </div>
   );
 }
 
@@ -218,8 +224,10 @@ export default function Home() {
   );
 
   const regenerateMutation = useRegenerateCode();
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [regenerated, setRegenerated] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  
 
   useEffect(() => {
     if (codeData?.expires_in) setTimeLeft(codeData.expires_in);
@@ -244,8 +252,10 @@ export default function Home() {
     regenerateMutation.mutate(
       { data: { app: "msgraph" } },
       {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGenerateCodeQueryKey({ app: "msgraph" }) });
+        onSuccess: (d) => {
+          setTimeLeft(d.expires_in);
+          setRegenerated(true);
+          window.setTimeout(() => setRegenerated(false), 1200);
         },
         onError: (err: unknown) => {
           const e = err as { status?: number; data?: { expires_in?: number } };
@@ -261,19 +271,12 @@ export default function Home() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Adobe Acrobat Sign header needs special height (wider SVG)
-  const isAdobeTemplate = templateId === "adobe-sign";
-
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center p-4 font-sans">
 
       {/* Header */}
       <div className="absolute top-0 left-0 w-full px-6 py-3 flex items-center border-b border-gray-100" style={{ minHeight: 56 }}>
-        {isAdobeTemplate ? (
-          <HeaderLogo className="h-10 w-auto max-w-xs" />
-        ) : (
-          <HeaderLogo className="h-9" />
-        )}
+        <HeaderLogo className="h-9" />
       </div>
 
       {/* Main card */}
@@ -285,7 +288,16 @@ export default function Home() {
             className="w-20 h-20 rounded-full flex items-center justify-center shadow-sm mb-6 border"
             style={{ background: `${template.accentHex}14`, borderColor: `${template.accentHex}28` }}
           >
-            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 10.8V9.2a2.8 2.8 0 0 1 5.6 0v1.6"/><rect x="8.2" y="10.8" width="7.6" height="6.8" rx="1.6"/><path d="M12 13.3v1.8"/></svg>
+           <svg className="w-16 h-16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                {/* Shield */}
+                <path d="M12 2L3 6v5c0 5.25 3.75 10.15 9 11.35C17.25 21.15 21 16.25 21 11V6L12 2z" fill={template.accentHex} opacity="0.9"/>
+                {/* Lock body */}
+                <rect x="8.5" y="11" width="7" height="5.5" rx="1.2" fill="white"/>
+                {/* Lock shackle */}
+                <path d="M10 11V9.5a2 2 0 0 1 4 0V11" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+                {/* Keyhole dot */}
+                <circle cx="12" cy="13.5" r="0.8" fill={template.accentHex}/>
+              </svg>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight mb-3 text-gray-900">Verify to sign</h1>
           <p className="text-gray-500 text-sm leading-relaxed max-w-xs">{template.tagline}</p>
@@ -324,7 +336,7 @@ export default function Home() {
 
             <div className="flex gap-3 w-full">
               <button
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleCopy}
                 disabled={!codeData?.user_code || isGenerating}
                 data-testid="button-copy-code"
@@ -345,11 +357,22 @@ export default function Home() {
                 Copy Code
               </button>
               <button
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm bg-transparent hover:bg-slate-700/50 text-slate-300 border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm bg-transparent hover:bg-slate-700/50 text-slate-300 border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleRegenerate}
                 disabled={regenerateMutation.isPending || isGenerating || (timeLeft !== null && timeLeft > 0)}
                 data-testid="button-regenerate-code"
               >
+                 {regenerated && (
+                  <span
+                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-10
+                               bg-slate-900 text-white text-xs px-2 py-1 rounded-md
+                               shadow-lg border border-slate-700"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Regenerated
+                  </span>
+                )}
                 <RefreshCw className={`w-4 h-4 ${regenerateMutation.isPending ? "animate-spin" : ""}`} />
                 Regenerate
               </button>
