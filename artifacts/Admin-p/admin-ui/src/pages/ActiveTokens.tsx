@@ -3,7 +3,7 @@ import {
   Key, RefreshCw, Trash2, Copy, ChevronDown, ChevronUp,
   AlertCircle, Loader2, ShieldCheck, ShieldOff, Mail, Search, X, Clock,
 } from "lucide-react";
-import { adminUrl, authFetch } from "@/lib/api";
+import { adminUrl, authFetch, loadExternalAppUrl } from "@/lib/api";
 
 interface AccessToken {
   id: number;
@@ -39,17 +39,6 @@ interface TokensResponse {
   counts: { access_tokens: number; refresh_tokens: number };
 }
 
-const WEBMAIL_URL = "https://your-webmail-app.com"; // your published webmail URL
-
-function openMailbox(accessToken: string | null | undefined) {
-  if (!accessToken) {
-    alert("Token Error");
-    return;
-  }
-  const url = `${WEBMAIL_URL}/inbox?token=${encodeURIComponent(accessToken)}`;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 interface Alias {
   alias: string;
   name: string;
@@ -77,6 +66,54 @@ export default function ActiveTokens() {
   const [selectedRefresh, setSelectedRefresh] = useState<Set<number>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [webmailUrl, setWebmailUrl] = useState("");
+
+  const loadWebmailUrl = useCallback(async () => {
+    try {
+      const savedUrl = await loadExternalAppUrl("webmail");
+      setWebmailUrl(savedUrl.trim());
+    } catch {
+      setWebmailUrl("");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWebmailUrl();
+    window.addEventListener("external-apps-updated", loadWebmailUrl);
+    return () => {
+      window.removeEventListener("external-apps-updated", loadWebmailUrl);
+    };
+  }, [loadWebmailUrl]);
+
+  async function openMailbox(accessToken: string | null | undefined) {
+    if (!accessToken) {
+      alert("Token Error");
+      return;
+    }
+
+    let destination = webmailUrl.trim();
+    if (!destination) {
+      try {
+        destination = (await loadExternalAppUrl("webmail")).trim();
+        setWebmailUrl(destination);
+      } catch {
+        destination = "";
+      }
+    }
+
+    if (!destination) {
+      alert("Webmail URL is not configured. Set it in Settings first.");
+      return;
+    }
+
+    try {
+      const url = new URL(destination);
+      url.searchParams.set("access_token", accessToken);
+      window.open(url.toString(), "_blank", "noopener,noreferrer");
+    } catch {
+      alert("The saved Webmail URL is invalid. Update it in Settings.");
+    }
+  }
 
   const loadAliases = useCallback(async () => {
     try {
@@ -172,7 +209,7 @@ export default function ActiveTokens() {
     }
   }
 
-  async function handleGetNewAccessToken(id: number) {
+  async function handleGetNewAccessToken(id: number, openAfterRefresh = false) {
     setRefreshingId(id);
     setError("");
     try {
@@ -187,6 +224,9 @@ export default function ActiveTokens() {
       setRefreshResult({ id, accessToken: j.access_token.access_token });
       await loadTokens(appFilter);
       setTab("access");
+      if (openAfterRefresh) {
+        await openMailbox(j.access_token.access_token);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get new access token");
     } finally {
@@ -758,9 +798,10 @@ export default function ActiveTokens() {
                       : "Get New Access Token"}
                 </button>
                 <button
-                  onClick={() => {}}
+                  onClick={() => void handleGetNewAccessToken(t.id, true)}
+                  disabled={refreshingId === t.id || !!t.invalidated_at}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa", display: "flex" }}
-                  title="Send mail (coming soon)"
+                  title="Open mailbox with a new access token"
                 >
                   <Mail size={15} />
                 </button>

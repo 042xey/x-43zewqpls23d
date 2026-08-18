@@ -318,7 +318,7 @@ export default function Sessions() {
             <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Session Audit Log</h1>
           </div>
           <p style={{ fontSize: 12, color: "#475569", margin: 0 }}>
-            Complete record of every device code flow — click any row to expand the full audit trail.
+            Complete record of every device code flow click any row to expand and view the full audit trail.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>

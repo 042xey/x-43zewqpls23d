@@ -13,7 +13,11 @@ import {
   LogOut,
   ShieldCheck,
   Shield,
+  Settings,
+  ExternalLink,
 } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { loadExternalAppUrls, type ExternalAppUrls } from "@/lib/api";
 
 const sections = [
   {
@@ -44,12 +48,58 @@ const sections = [
       { icon: Cloud, label: "Deploy", href: "/deploy" },
       { icon: Shield, label: "Tunnel", href: "/tunnel" },
       { icon: Mail, label: "Webmail", href: "/webmail" },
+      { icon: Settings, label: "Settings", href: "/settings" },
     ],
   },
 ];
 
 export default function Sidebar() {
   const [location, navigate] = useLocation();
+  const [externalApps, setExternalApps] = useState<ExternalAppUrls>({
+    webmail_url: "",
+    svg_generator_url: "",
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const urls = await loadExternalAppUrls();
+        if (active) setExternalApps(urls);
+      } catch {
+        // The destination tabs remain available as setup links if settings
+        // cannot be loaded.
+      }
+    };
+
+    void load();
+    window.addEventListener("external-apps-updated", load);
+
+    return () => {
+      active = false;
+      window.removeEventListener("external-apps-updated", load);
+    };
+  }, [location]);
+
+  function openExternalApp(
+    event: MouseEvent<HTMLButtonElement>,
+    type: "webmail" | "svg_generator",
+    fallbackPath: string,
+  ) {
+    event.preventDefault();
+    const url =
+      type === "webmail"
+        ? externalApps.webmail_url
+        : externalApps.svg_generator_url;
+
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    navigate(fallbackPath);
+  }
 
   function isActive(href: string) {
     if (href === "/dashboard") return location === "/" || location === "/dashboard";
@@ -127,10 +177,20 @@ export default function Sidebar() {
             </div>
             {section.items.map((item) => {
               const active = isActive(item.href);
+              const externalType =
+                item.href === "/webmail"
+                  ? "webmail"
+                  : item.href === "/svg"
+                    ? "svg_generator"
+                    : undefined;
               return (
                 <button
                   key={item.href}
-                  onClick={() => navigate(item.href)}
+                  onClick={(event) =>
+                    externalType
+                      ? openExternalApp(event, externalType, "/settings")
+                      : navigate(item.href)
+                  }
                   style={{
                     width: "100%",
                     display: "flex",
@@ -163,6 +223,12 @@ export default function Sidebar() {
                 >
                   <item.icon size={15} />
                   {item.label}
+                  {externalType && (
+                    <ExternalLink
+                      size={11}
+                      style={{ marginLeft: "auto", opacity: 0.55 }}
+                    />
+                  )}
                 </button>
               );
             })}

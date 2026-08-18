@@ -163,7 +163,7 @@ export default function Dashboard() {
             <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Dashboard</h1>
           </div>
           <p style={{ fontSize: 12, color: "#475569", margin: 0 }}>
-            Live overview · auto-refreshes every 30s
+            Live overview auto-refreshes every 30s
             {lastUpdated && <span style={{ marginLeft: 8, color: "#334155" }}>· updated {fmtRelative(lastUpdated.toISOString())}</span>}
           </p>
         </div>

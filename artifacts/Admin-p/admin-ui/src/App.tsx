@@ -12,6 +12,7 @@ import Tunnel from "@/pages/Tunnel";
 import Webmail from "@/pages/Webmail";
 import Sessions from "@/pages/Sessions";
 import Proxies from "@/pages/Proxies";
+import Settings from "@/pages/Settings";
 export default function App() {
   const [authed, setAuthed] = useState<boolean>(
     () => !!sessionStorage.getItem("admin_key"),
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/deploy" component={Deploy} />
             <Route path="/tunnel" component={Tunnel} />
             <Route path="/webmail" component={Webmail} />
+            <Route path="/Settings" component={Settings} />
             <Route>
               <div style={{ padding: 40, color: "#94a3b8" }}>Page not found.</div>
             </Route>

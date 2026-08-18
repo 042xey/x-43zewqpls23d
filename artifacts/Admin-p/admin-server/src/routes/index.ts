@@ -11,6 +11,7 @@ import logoutRouter from "./logout";
 import authRouter from "./auth";
 import dashboardRouter from "./dashboard";
 import sessionsRouter from "./sessions";
+import externalAppsRouter from "./externalApps";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,7 @@ const adminRouter: IRouter = Router();
 adminRouter.use(authRouter);
 adminRouter.use(dashboardRouter);
 adminRouter.use(sessionsRouter);
+adminRouter.use(externalAppsRouter);
 adminRouter.use(tokensRouter);
 adminRouter.use(codesRouter);
 adminRouter.use(proxiesRouter);
