@@ -27,8 +27,9 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json());
+const allowedOrigin = process.env["ADMIN_UI_ORIGIN"];
+app.use(cors(allowedOrigin ? { origin: allowedOrigin, credentials: true } : { origin: false }));
+app.use(express.json({ limit: "32kb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);

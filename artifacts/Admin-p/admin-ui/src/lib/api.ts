@@ -6,12 +6,13 @@ export function adminUrl(path: string): string {
 }
 
 export function authFetch(url: string, init?: RequestInit): Promise<Response> {
-  const key = sessionStorage.getItem("admin_key") ?? "";
+  const csrf = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith("admin_csrf="))?.slice("admin_csrf=".length);
   return fetch(url, {
     ...init,
+    credentials: "same-origin",
     headers: {
       ...(init?.headers ?? {}),
-      "X-Admin-Key": key,
+      ...(csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {}),
     },
   });
 }

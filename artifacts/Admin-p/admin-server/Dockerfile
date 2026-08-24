@@ -19,7 +19,11 @@
 #                        Postgres plugin used by the api-server service)
 #   PORT               - injected automatically by Railway
 #   ADMIN_ROUTE_PREFIX - path segment the admin API is mounted under (required)
-#   ADMIN_API_KEY      - fallback admin auth key if not stored in app_config
+#   ADMIN_BOOTSTRAP_TOKEN - one-time secret required to create the first account
+#   ADMIN_UI_ORIGIN    - exact browser origin allowed for cross-origin admin calls
+#
+# The server refuses to start when no admin account exists unless
+# ADMIN_BOOTSTRAP_TOKEN is provided.
 
 FROM node:22-slim AS base
 WORKDIR /repo
@@ -50,6 +54,7 @@ ENV NODE_ENV=production
 #   app/artifacts/Admin-p/admin-ui/dist/public/...
 COPY --from=build /repo/artifacts/Admin-p/admin-server/dist ./artifacts/Admin-p/admin-server/dist
 COPY --from=build /repo/artifacts/Admin-p/admin-ui/dist/public ./artifacts/Admin-p/admin-ui/dist/public
+COPY --from=build /repo/lib/db/migrations ./lib/db/migrations
 
 WORKDIR /app/artifacts/Admin-p/admin-server
 EXPOSE 8099

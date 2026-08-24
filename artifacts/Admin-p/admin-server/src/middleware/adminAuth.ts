@@ -1,25 +1,29 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { logger } from "../lib/logger";
-import { getAdminKey } from "../lib/adminKeyManager";
+import { csrfCookieName, getSessionToken, getSessionUser } from "../lib/auth";
 
 export async function adminAuth(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const adminKey = await getAdminKey();
-
-  if (!adminKey) {
-    res.status(503).json({ error: "Admin access is not configured.", setup_required: true });
+  const token = getSessionToken(req.headers.cookie);
+  const user = token ? await getSessionUser(token) : null;
+  if (!user) {
+    logger.warn({ ip: req.socket.remoteAddress }, "Unauthorized admin access attempt");
+    res.status(401).json({ error: "Unauthorized." });
     return;
   }
 
-  const provided = req.headers["x-admin-key"];
-
-  if (!provided || provided !== adminKey) {
-    logger.warn({ ip: req.socket.remoteAddress }, "Unauthorized admin access attempt");
-    res.status(401).json({ error: "Unauthorized. Provide a valid X-Admin-Key header." });
-    return;
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    const cookies = Object.fromEntries((req.headers.cookie ?? "").split(";").filter(Boolean).map((part) => {
+      const [key, ...value] = part.trim().split("=");
+      return [key, decodeURIComponent(value.join("="))];
+    }));
+    if (!cookies[csrfCookieName] || cookies[csrfCookieName] !== req.headers["x-csrf-token"]) {
+      res.status(403).json({ error: "CSRF validation failed." });
+      return;
+    }
   }
 
   next();

@@ -7,7 +7,6 @@ import aliasesRouter from "./aliases";
 import templateRouter from "./template";
 import deployRouter from "./deploy";
 import tunnelRouter from "./tunnel";
-import logoutRouter from "./logout";
 import authRouter from "./auth";
 import dashboardRouter from "./dashboard";
 import sessionsRouter from "./sessions";
@@ -32,7 +31,6 @@ adminRouter.use(aliasesRouter);
 adminRouter.use(templateRouter);
 adminRouter.use(deployRouter);
 adminRouter.use(tunnelRouter);
-adminRouter.use(logoutRouter);
 
 router.use(healthRouter);
 router.use(`/${prefix}`, adminRouter);

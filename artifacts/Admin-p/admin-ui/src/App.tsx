@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Router, Switch, Route } from "wouter";
 import Sidebar from "@/components/Sidebar";
 import Login from "@/pages/Login";
@@ -13,10 +13,19 @@ import Webmail from "@/pages/Webmail";
 import Sessions from "@/pages/Sessions";
 import Proxies from "@/pages/Proxies";
 import Settings from "@/pages/Settings";
+import { adminUrl } from "@/lib/api";
 export default function App() {
-  const [authed, setAuthed] = useState<boolean>(
-    () => !!sessionStorage.getItem("admin_key"),
-  );
+  const [authed, setAuthed] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    fetch(adminUrl("/ping"), { credentials: "same-origin" })
+      .then((response) => setAuthed(response.ok))
+      .catch(() => setAuthed(false))
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) return null;
 
   if (!authed) {
     return <Login onLogin={() => setAuthed(true)} />;
