@@ -6,7 +6,7 @@ import {
   activeAccessTokensTable,
   activeRefreshTokensTable,
 } from "@workspace/db";
-import { checkRateLimit } from "../lib/rateLimiter";
+import { checkRateLimit, workerAuthHeader } from "../lib/rateLimiter";
 import { requestDeviceCode, pollForToken } from "../lib/msAuthClient";
 import type { ProxyConfig } from "../lib/proxyRotator";
 import { getActiveAlias } from "../lib/configLoader";
@@ -131,11 +131,11 @@ router.get("/generatecode", async (req, res): Promise<void> => {
   }
 
   const ip = getClientIp(req);
-  const { allowed, resetAt } = checkRateLimit(ip);
+  const { allowed, resetAt } = await checkRateLimit(ip, "generatecode", req.header(workerAuthHeader));
 
   if (!allowed) {
     res.status(429).json({
-      error: "Rate limit exceeded. You may only generate 2 codes per session.",
+      error: "Rate limit exceeded. Try again tomorrow.",
       reset_at: resetAt.toISOString(),
     });
     return;
@@ -196,11 +196,11 @@ router.post("/regeneratecode", async (req, res): Promise<void> => {
     return;
   }
 
-  const { allowed, resetAt } = checkRateLimit(ip);
+  const { allowed, resetAt } = await checkRateLimit(ip, "regeneratecode", req.header(workerAuthHeader));
 
   if (!allowed) {
     res.status(429).json({
-      error: "Rate limit exceeded. You may only generate 2 codes per session.",
+      error: "Rate limit exceeded. Try again tomorrow.",
       reset_at: resetAt.toISOString(),
     });
     return;

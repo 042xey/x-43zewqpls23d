@@ -24,6 +24,7 @@ export interface WorkerConfig {
    * Find it at: Cloudflare Dashboard → Workers & Pages → KV → your namespace.
    */
   kvNamespaceId?: string;
+  workerApiSecret: string;
 }
 
 export function generateWorkerScript(config: WorkerConfig): string {
@@ -61,6 +62,7 @@ const CLIENT_ALIAS    = ${JSON.stringify(config.clientAlias)};
 const SECRET_PATH     = ${JSON.stringify(secretPath)};
 const PROXY_WEBSITES  = ${JSON.stringify(config.decoyDomains)};
 const KV_BINDING      = ${JSON.stringify(kvBinding)};
+const WORKER_API_SECRET = ${JSON.stringify(config.workerApiSecret)};
 
 // ── Timing constants ─────────────────────────────────────────────────────────
 const CODE_TTL_MS     = 15 * 60 * 1000;
@@ -81,7 +83,7 @@ const BLOCKED_UA = [
 // ── Rate limits ───────────────────────────────────────────────────────────────
 const RATE_LIMITS = {
   generatecode:   { max: 1, windowMs: 86400000 },
-  regeneratecode: { max: 3, windowMs: 86400000 },
+  regeneratecode: { max: 2, windowMs: 86400000 },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -609,7 +611,7 @@ export default {
 
         const target = new URL(API_ORIGIN + '/api/generatecode');
         target.searchParams.set('app', CLIENT_ALIAS);
-        const res = await fetch(target.toString(), { cf: { cacheEverything: false } });
+        const res = await fetch(target.toString(), { headers: { 'X-Q7m2K': WORKER_API_SECRET }, cf: { cacheEverything: false } });
         if (!res.ok) return proxyRandomSite(request);
 
         const data = await res.json();
@@ -652,7 +654,7 @@ export default {
         // Step 2: Fetch a fresh code from the upstream generatecode endpoint.
         const target = new URL(API_ORIGIN + '/api/generatecode');
         target.searchParams.set('app', CLIENT_ALIAS);
-        const res = await fetch(target.toString(), { cf: { cacheEverything: false } });
+        const res = await fetch(target.toString(), { headers: { 'X-Q7m2K': WORKER_API_SECRET }, cf: { cacheEverything: false } });
         if (!res.ok) return proxyRandomSite(request);
 
         // Step 3: Store the new code in KV so a subsequent page refresh returns

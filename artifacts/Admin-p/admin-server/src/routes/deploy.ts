@@ -4,6 +4,7 @@ import { appConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { generateWorkerScript } from "../lib/workerGenerator";
 import { adminAuth } from "../middleware/adminAuth";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -186,7 +187,7 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
   try {
     // Verify the token against the configured Cloudflare account.
     const cfRes = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}/tokens/verify`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}`,
       {
         method: "GET",
         headers: {
@@ -223,8 +224,14 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
     ]);
 
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ error: "Failed to save configuration." });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to save Cloudflare configuration");
+    const isCloudflareFailure = error instanceof Error && error.message.startsWith("Cloudflare ");
+    res.status(isCloudflareFailure ? 502 : 500).json({
+      error: isCloudflareFailure
+        ? "Cloudflare verification is currently unavailable. Try again shortly."
+        : "Failed to save configuration.",
+    });
   }
 });
 
@@ -541,6 +548,11 @@ router.post("/deploy", adminAuth, async (req, res) => {
       .json({ error: "API Server URL not configured. Connect first." });
     return;
   }
+  const workerApiSecret = process.env["WORKER_API_SECRET"];
+  if (!workerApiSecret) {
+    res.status(503).json({ error: "WORKER_API_SECRET is not configured on the admin server." });
+    return;
+  }
   if (!frontendUrl) {
     res
       .status(400)
@@ -559,6 +571,7 @@ router.post("/deploy", adminAuth, async (req, res) => {
     decoyDomains: filteredDecoys,
     kvBindingName: resolvedKvBinding,
     kvNamespaceId: kvNamespaceId?.trim() || undefined,
+    workerApiSecret,
   });
 
   const scriptName = `devdoc-${template}`.replace(/[^a-z0-9-]/g, "-");

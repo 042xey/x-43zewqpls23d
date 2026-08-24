@@ -50,6 +50,7 @@ ENV NODE_ENV=production
 #   app/artifacts/frontend/dist/public/...
 COPY --from=build /repo/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=build /repo/artifacts/frontend/dist/public ./artifacts/frontend/dist/public
+COPY --from=build /repo/lib/db/migrations ./lib/db/migrations
 
 WORKDIR /app/artifacts/api-server
 EXPOSE 8080

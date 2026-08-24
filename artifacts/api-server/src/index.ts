@@ -5,6 +5,7 @@ import { initConfigLoader } from "./lib/configLoader";
 import { resumeAllRefreshCycles } from "./lib/tokenRefresher";
 import { initTunnelManager } from "./lib/tunnelManager";
 import { CLIENT_ALIAS_MAP } from "./routes/generateCode";
+import { runMigrations } from "@workspace/db/migrate";
 
 const rawPort = process.env["PORT"];
 
@@ -21,6 +22,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 Promise.all([
+  runMigrations(),
   initProxyRotator(),
   initConfigLoader(),
   resumeAllRefreshCycles(CLIENT_ALIAS_MAP),
