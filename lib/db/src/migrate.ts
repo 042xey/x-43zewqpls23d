@@ -1,12 +1,31 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db } from "./index";
 
-const migrationsDir = process.env["MIGRATIONS_DIR"] ?? fileURLToPath(new URL("../../../../lib/db/migrations/", import.meta.url));
+async function resolveMigrationsDir(): Promise<string> {
+  const candidates = [
+    process.env["MIGRATIONS_DIR"],
+    path.resolve(process.cwd(), "lib/db/migrations"),
+    path.resolve(process.cwd(), "../../lib/db/migrations"),
+    fileURLToPath(new URL("../../../lib/db/migrations/", import.meta.url)),
+    fileURLToPath(new URL("../../../../lib/db/migrations/", import.meta.url)),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Try the next supported source layout.
+    }
+  }
+  throw new Error(`Migration directory not found. Checked: ${candidates.join(", ")}`);
+}
 
 export async function runMigrations(): Promise<void> {
+  const migrationsDir = await resolveMigrationsDir();
   const files = (await readdir(migrationsDir))
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .sort();
