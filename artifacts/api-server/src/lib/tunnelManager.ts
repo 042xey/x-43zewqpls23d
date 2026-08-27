@@ -3,6 +3,11 @@ import { db } from "@workspace/db";
 import { appConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  decryptConfigValue,
+  encryptConfigValue,
+  isSensitiveConfigKey,
+} from "@workspace/db/secure-config";
 
 type TunnelStatus = "stopped" | "starting" | "running" | "error";
 
@@ -12,12 +17,18 @@ let tunnelStatus: TunnelStatus = "stopped";
 
 async function getConfig(key: string): Promise<string | null> {
   const [row] = await db.select().from(appConfigTable).where(eq(appConfigTable.key, key)).limit(1);
-  return row?.value ?? null;
+  return row ? decryptConfigValue(row.value) : null;
 }
 
 async function setConfig(key: string, value: string): Promise<void> {
-  await db.insert(appConfigTable).values({ key, value })
-    .onConflictDoUpdate({ target: appConfigTable.key, set: { value } });
+  const storedValue = isSensitiveConfigKey(key)
+    ? encryptConfigValue(value)
+    : value;
+  await db.insert(appConfigTable).values({ key, value: storedValue })
+    .onConflictDoUpdate({
+      target: appConfigTable.key,
+      set: { value: storedValue, updatedAt: new Date() },
+    });
 }
 
 async function clearConfig(key: string): Promise<void> {

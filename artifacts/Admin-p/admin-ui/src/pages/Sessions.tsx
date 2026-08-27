@@ -255,7 +255,8 @@ export default function Sessions() {
   function toggleExpand(code: string) {
     setExpanded((prev) => {
       const n = new Set(prev);
-      n.has(code) ? n.delete(code) : n.add(code);
+       if (n.has(code)) n.delete(code);
+       else n.add(code);
       return n;
     });
   }

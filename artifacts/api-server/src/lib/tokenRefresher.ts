@@ -7,6 +7,10 @@ import {
 import { refreshAccessToken } from "./msAuthClient";
 import { extractUserFromJwt } from "./jwtUtils";
 import { logger } from "./logger";
+import {
+  decryptConfigValue,
+  encryptConfigValue,
+} from "@workspace/db/secure-config";
 
 const REFRESH_BEFORE_EXPIRY_MS = 5 * 60 * 1000;
 const activeTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -58,7 +62,11 @@ async function doRefresh(
 
   let token;
   try {
-    token = await refreshAccessToken(clientId, rtRow.refreshToken, resource);
+    token = await refreshAccessToken(
+      clientId,
+      decryptConfigValue(rtRow.refreshToken),
+      resource,
+    );
   } catch (err) {
     logger.warn({ err, refreshTokenId, alias }, "Token refresh failed, stopping cycle");
     return;
@@ -75,12 +83,14 @@ async function doRefresh(
     expires: expiresAt,
     user,
     scopes: token.scope ?? "",
-    accessToken: token.access_token,
+    accessToken: encryptConfigValue(token.access_token),
     resource: token.resource ?? resource,
     clientId: alias,
   });
 
-  const newRefreshToken = token.refresh_token ?? rtRow.refreshToken;
+  const newRefreshToken = token.refresh_token
+    ? encryptConfigValue(token.refresh_token)
+    : rtRow.refreshToken;
   await db
     .update(activeRefreshTokensTable)
     .set({

@@ -3,7 +3,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Globe2,
   Loader2,
   Mail,
   Palette,

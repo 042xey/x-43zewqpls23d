@@ -9,6 +9,10 @@ import {
 import { adminAuth } from "../middleware/adminAuth";
 import { CLIENT_ALIAS_MAP } from "../lib/clientAliases";
 import { refreshAccessToken, RefreshGrantError } from "../lib/msTokenclient";
+import {
+  decryptConfigValue,
+  encryptConfigValue,
+} from "@workspace/db/secure-config";
 
 const router: IRouter = Router();
 
@@ -71,7 +75,7 @@ router.get("/tokens", adminAuth, async (req, res): Promise<void> => {
       issued: t.issued.toISOString(),
       expires: t.expires.toISOString(),
       expired: t.expires < now,
-      access_token: t.accessToken,
+      access_token: "[redacted]",
     })),
     refresh_tokens: refreshTokens.map((t) => ({
       id: t.id,
@@ -260,9 +264,10 @@ router.post(
           };
         }
 
+        const currentRefreshToken = decryptConfigValue(refreshRow.refreshToken);
         const token = await refreshAccessToken(
           client.id,
-          refreshRow.refreshToken,
+          currentRefreshToken,
           refreshRow.resource,
         );
 
@@ -276,17 +281,21 @@ router.post(
             expires,
             user: refreshRow.user,
             scopes: token.scope,
-            accessToken: token.access_token,
+            accessToken: encryptConfigValue(token.access_token),
             resource: refreshRow.resource,
             clientId: refreshRow.clientId,
           })
           .returning();
 
         const refreshTokenExpiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-        if (token.refresh_token && token.refresh_token !== refreshRow.refreshToken) {
+        if (token.refresh_token && token.refresh_token !== currentRefreshToken) {
           await tx
             .update(activeRefreshTokensTable)
-            .set({ refreshToken: token.refresh_token, lastRefreshedAt: now, refreshTokenExpiresAt })
+            .set({
+              refreshToken: encryptConfigValue(token.refresh_token),
+              lastRefreshedAt: now,
+              refreshTokenExpiresAt,
+            })
             .where(eq(activeRefreshTokensTable.id, id));
         } else {
           await tx
@@ -307,7 +316,7 @@ router.post(
             issued: now.toISOString(),
             expires: expires.toISOString(),
             expired: false,
-            access_token: token.access_token,
+            access_token: "[redacted]",
           },
         };
       });

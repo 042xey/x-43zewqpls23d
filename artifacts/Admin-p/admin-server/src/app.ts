@@ -1,16 +1,31 @@
-import express, { type Express } from "express";
+import express, {
+  type Express,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import { randomUUID } from "node:crypto";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { recordHttpRequest } from "./lib/metrics";
 
 const app: Express = express();
 
 app.use(
   pinoHttp({
     logger,
+    genReqId: (req, res) => {
+      const requestId = req.headers["x-request-id"];
+      const id = typeof requestId === "string" && requestId.trim()
+        ? requestId.trim().slice(0, 128)
+        : randomUUID();
+      res.setHeader("x-request-id", id);
+      return id;
+    },
     serializers: {
       req(req) {
         return {
@@ -27,10 +42,27 @@ app.use(
     },
   }),
 );
-const allowedOrigin = process.env["ADMIN_UI_ORIGIN"];
-app.use(cors(allowedOrigin ? { origin: allowedOrigin, credentials: true } : { origin: false }));
+const allowedOrigins = new Set(
+  (process.env["ADMIN_UI_ORIGIN"] ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+app.use(
+  cors({
+    credentials: true,
+    origin: (origin, callback) => {
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
+  }),
+);
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.once("finish", () => recordHttpRequest(res.statusCode, Date.now() - startedAt));
+  next();
+});
 app.use(express.json({ limit: "32kb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "32kb" }));
 
 app.use("/api", router);
 
@@ -45,6 +77,15 @@ app.get("/admin-panel/{*path}", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.redirect(301, "/admin-panel/");
+});
+
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  req.log.error({ err }, "Unhandled request error");
+  res.status(500).json({ error: "Internal server error." });
 });
 
 export default app;

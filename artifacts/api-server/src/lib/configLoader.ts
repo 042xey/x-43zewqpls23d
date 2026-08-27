@@ -7,7 +7,6 @@ const CONFIG_KEY = "active_alias";
 const REFRESH_INTERVAL_MS = 60_000;
 
 let activeAlias: string | null = null;
-let lastLoaded = 0;
 
 export async function initConfigLoader(): Promise<void> {
   await loadConfig();
@@ -24,7 +23,6 @@ async function loadConfig(): Promise<void> {
     .from(appConfigTable)
     .where(eq(appConfigTable.key, CONFIG_KEY));
   activeAlias = row?.value ?? null;
-  lastLoaded = Date.now();
   logger.info({ activeAlias }, "Config loaded");
 }
 

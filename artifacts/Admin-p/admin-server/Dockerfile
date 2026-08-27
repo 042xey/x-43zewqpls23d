@@ -20,7 +20,9 @@
 #   PORT               - injected automatically by Railway
 #   ADMIN_ROUTE_PREFIX - path segment the admin API is mounted under (required)
 #   ADMIN_BOOTSTRAP_TOKEN - one-time secret required to create the first account
-#   ADMIN_UI_ORIGIN    - exact browser origin allowed for cross-origin admin calls
+#   ADMIN_UI_ORIGIN    - comma-separated exact browser origins allowed for
+#                        cross-origin admin calls
+#   METRICS_TOKEN      - bearer token required to access /api/metrics (optional)
 #
 # The server refuses to start when no admin account exists unless
 # ADMIN_BOOTSTRAP_TOKEN is provided.
@@ -52,10 +54,11 @@ ENV NODE_ENV=production
 # Preserve the same relative layout admin-server expects on disk:
 #   app/artifacts/Admin-p/admin-server/dist/index.mjs
 #   app/artifacts/Admin-p/admin-ui/dist/public/...
-COPY --from=build /repo/artifacts/Admin-p/admin-server/dist ./artifacts/Admin-p/admin-server/dist
-COPY --from=build /repo/artifacts/Admin-p/admin-ui/dist/public ./artifacts/Admin-p/admin-ui/dist/public
-COPY --from=build /repo/lib/db/migrations ./lib/db/migrations
+COPY --from=build --chown=node:node /repo/artifacts/Admin-p/admin-server/dist ./artifacts/Admin-p/admin-server/dist
+COPY --from=build --chown=node:node /repo/artifacts/Admin-p/admin-ui/dist/public ./artifacts/Admin-p/admin-ui/dist/public
+COPY --from=build --chown=node:node /repo/lib/db/migrations ./lib/db/migrations
 
 WORKDIR /app/artifacts/Admin-p/admin-server
+USER node
 EXPOSE 8099
 CMD ["node", "--enable-source-maps", "dist/index.mjs"]

@@ -4,7 +4,7 @@ import {
   ExternalLink, Trash2, Info, CheckCircle2, AlertCircle, Copy,
   RotateCcw,
 } from "lucide-react";
-import { adminUrl, authFetch } from "@/lib/api";
+import { adminUrl, authFetch, safeExternalUrl } from "@/lib/api";
 
 type TunnelStatus = "unknown" | "configured" | "unconfigured";
 
@@ -187,7 +187,7 @@ export default function Tunnel() {
             <button onClick={copyUrl} style={{ background: "none", border: "none", cursor: "pointer", color: "#4ade80", display: "flex", gap: 4, alignItems: "center", fontSize: 12, flexShrink: 0 }}>
               <Copy size={13} /> {urlCopied ? "Copied!" : "Copy"}
             </button>
-            <a href={tunnelUrl} target="_blank" rel="noreferrer" style={{ color: "#4ade80", display: "flex" }}>
+            <a href={safeExternalUrl(tunnelUrl) ?? "#"} target="_blank" rel="noopener noreferrer" style={{ color: "#4ade80", display: "flex" }}>
               <ExternalLink size={14} />
             </a>
           </div>
@@ -218,7 +218,7 @@ export default function Tunnel() {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
           {status === "configured" && !token && (
-            <div style={{ display: "flex", align: "center", gap: 10, padding: "10px 14px", background: "#0d1e35", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12, color: "#60a5fa" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0d1e35", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12, color: "#60a5fa" }}>
               <CheckCircle2 size={13} style={{ flexShrink: 0, marginTop: 1 }} />
               Tunnel token is saved. Enter a new token below to replace it.
             </div>

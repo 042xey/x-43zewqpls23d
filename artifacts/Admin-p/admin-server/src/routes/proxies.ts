@@ -7,9 +7,25 @@ import { adminAuth } from "../middleware/adminAuth";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
+const MAX_PROXIES = 100;
+const TEST_CONCURRENCY = 10;
+
+function safeProxyUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.pathname = "/";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "[invalid-proxy-url]";
+  }
+}
 
 const ProxyListBody = z.object({
-  proxies: z.array(
+    proxies: z.array(
     z.object({
       url: z
         .string()
@@ -18,7 +34,7 @@ const ProxyListBody = z.object({
           message: "Proxy URL must start with http",
         }),
     }),
-  ),
+    ).max(MAX_PROXIES),
 });
 
 router.get("/proxies", adminAuth, async (_req, res): Promise<void> => {
@@ -27,7 +43,7 @@ router.get("/proxies", adminAuth, async (_req, res): Promise<void> => {
     count: rows.length,
     proxies: rows.map((r) => ({
       id: r.id,
-      url: r.url,
+       url: safeProxyUrl(r.url),
       added_at: r.addedAt.toISOString(),
     })),
   });
@@ -64,12 +80,15 @@ router.post("/proxies/add", adminAuth, async (req, res): Promise<void> => {
     return;
   }
   const [inserted] = await db.insert(proxyUrlsTable).values({ url }).returning();
-  req.log.info({ url }, "Proxy added");
-  res.json({ id: inserted!.id, url: inserted!.url, added_at: inserted!.addedAt.toISOString() });
+  req.log.info({ proxy: safeProxyUrl(url) }, "Proxy added");
+  res.json({ id: inserted!.id, url: safeProxyUrl(inserted!.url), added_at: inserted!.addedAt.toISOString() });
 });
 
 router.delete("/proxies/:id", adminAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params["id"] ?? "");
+  const raw = Array.isArray(req.params["id"])
+    ? req.params["id"][0]
+    : req.params["id"];
+  const id = parseInt(raw ?? "", 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -99,23 +118,25 @@ function tcpTest(host: string, port: number, timeoutMs = 5023): Promise<{ ok: bo
 }
 
 router.post("/proxies/test", adminAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(proxyUrlsTable);
-
-  const results = await Promise.all(
-    rows.map(async (r) => {
+  const rows = await db.select().from(proxyUrlsTable).limit(MAX_PROXIES);
+  const results: { id: number; url: string; reachable: boolean; latency_ms: number | null }[] = [];
+  for (let offset = 0; offset < rows.length; offset += TEST_CONCURRENCY) {
+    const batch = rows.slice(offset, offset + TEST_CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(async (r) => {
       try {
         const parsed = new URL(r.url);
         const host = parsed.hostname;
         const port = parseInt(parsed.port) || (parsed.protocol === "https:" ? 443 : 80);
         const { ok, latencyMs } = await tcpTest(host, port);
-        return { id: r.id, url: r.url, reachable: ok, latency_ms: latencyMs };
+        return { id: r.id, url: safeProxyUrl(r.url), reachable: ok, latency_ms: latencyMs };
       } catch {
         return { id: r.id, url: r.url, reachable: false, latency_ms: null };
       }
-    }),
-  );
+    }));
+    results.push(...batchResults);
+  }
 
-  res.json({ results });
+  res.json({ results, truncated: rows.length === MAX_PROXIES });
 });
 
 export default router;

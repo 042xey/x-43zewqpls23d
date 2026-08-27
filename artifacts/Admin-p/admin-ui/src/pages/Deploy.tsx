@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import {
-  Eye, EyeOff, Link2, Cloud, Globe,
+  Eye, EyeOff, Link2, Cloud,
   FileText, PenTool, File, Share2, FolderOpen, Users,
   Mail, ExternalLink, Rocket,
   Info, CheckCircle2, AlertCircle, Terminal, Cpu, Copy,
   RefreshCw, Trash2, Activity,
 } from "lucide-react";
-import { adminUrl, authFetch } from "@/lib/api";
+import { adminUrl, authFetch, safeExternalUrl } from "@/lib/api";
 
 // ─── Template definitions (with inline SVG headers) ──────────────────────────
 
@@ -274,14 +274,6 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function SubLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>
-      {children}
-    </div>
-  );
-}
-
 // ─── Main Deploy page ─────────────────────────────────────────────────────────
 
 export default function Deploy() {
@@ -365,21 +357,20 @@ export default function Deploy() {
           clientAlias?: string;
           region?: string;
           workerUrl?: string;
-          scriptName?: string;
+           scriptName?: string;
+           publicCodePath?: string;
+           decoyDomains?: string[];
+           kvBindingName?: string;
         }) => {
           if (j.template) setTemplate(j.template as TemplateId);
           if (j.clientAlias) setClientAlias(j.clientAlias);
           if (j.region) setRegion(j.region);
           if (j.workerUrl) setDeployedUrl(j.workerUrl);
           if (j.scriptName) setDeployedScriptName(j.scriptName);
-          if ((j as any).publicCodePath)
-            setPublicCodePath((j as any).publicCodePath);
-          if ((j as any).decoyDomains?.length)
-            setDecoyDomains(
-              (j as any).decoyDomains.concat(Array(10).fill("")).slice(0, 10),
-            );
-          if ((j as any).kvBindingName)
-            setKvBindingName((j as any).kvBindingName);
+          if (j.publicCodePath) setPublicCodePath(j.publicCodePath);
+          if (j.decoyDomains?.length)
+            setDecoyDomains(j.decoyDomains.concat(Array(10).fill("")).slice(0, 10));
+          if (j.kvBindingName) setKvBindingName(j.kvBindingName);
         },
       )
       .catch(() => {});
@@ -1755,7 +1746,7 @@ export default function Deploy() {
                 Your Worker is live at:
               </div>
               <a
-                href={deployedUrl}
+                href={safeExternalUrl(deployedUrl) ?? "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

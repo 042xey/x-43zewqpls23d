@@ -14,6 +14,9 @@ export const activeRefreshTokensTable = pgTable("active_refresh_tokens", {
   refreshToken: text("refresh_token"),
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
   nextRefreshAt: timestamp("next_refresh_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+  invalidReason: text("invalid_reason"),
 });
 
 export const insertActiveRefreshTokenSchema =

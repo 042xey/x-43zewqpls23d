@@ -4,29 +4,25 @@ import { db } from "@workspace/db";
 import { adminUsersTable, appConfigTable } from "@workspace/db/schema";
 import { adminAuth } from "../middleware/adminAuth";
 import { createSession, deleteSession, getSessionToken, hashPassword, newCsrfToken, normalizeUsername, csrfCookieName, sessionCookieName, verifyPassword } from "../lib/auth";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { decryptConfigValue } from "@workspace/db/secure-config";
 
 const router = Router();
-const attempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, record] of attempts) {
-    if (record.resetAt <= now) attempts.delete(key);
-  }
-}, WINDOW_MS).unref();
-
-function limited(key: string): boolean {
-  const now = Date.now();
-  const current = attempts.get(key);
-  if (!current || current.resetAt <= now) {
-    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return false;
-  }
-  current.count += 1;
-  return current.count > MAX_ATTEMPTS;
+async function limited(key: string): Promise<boolean> {
+  const bucketKey = createHash("sha256").update(`admin-auth:${key}`).digest("hex");
+  const resetAt = new Date(Date.now() + WINDOW_MS);
+  const result = await db.execute(sql`
+    insert into rate_limit_buckets (key, count, reset_at)
+    values (${bucketKey}, 1, ${resetAt})
+    on conflict (key) do update set
+      count = case when rate_limit_buckets.reset_at <= now() then 1 else rate_limit_buckets.count + 1 end,
+      reset_at = case when rate_limit_buckets.reset_at <= now() then excluded.reset_at else rate_limit_buckets.reset_at end
+    returning count
+  `);
+  return Number((result.rows[0] as { count: number }).count) > MAX_ATTEMPTS;
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -53,13 +49,14 @@ router.get("/setup-status", async (_req, res) => {
 
 router.post("/setup", async (req, res): Promise<void> => {
   const ip = req.socket.remoteAddress ?? "unknown";
-  if (limited(`setup:${ip}`)) { res.status(429).json({ error: "Too many setup attempts. Try again later." }); return; }
+  if (await limited(`setup:${ip}`)) { res.status(429).json({ error: "Too many setup attempts. Try again later." }); return; }
   const bootstrap = process.env["ADMIN_BOOTSTRAP_TOKEN"];
   const suppliedBootstrap = typeof req.headers["x-bootstrap-token"] === "string" ? req.headers["x-bootstrap-token"] : "";
   const suppliedLegacyKey = typeof req.headers["x-admin-key"] === "string" ? req.headers["x-admin-key"] : "";
   const [legacyConfig] = await db.select({ value: appConfigTable.value }).from(appConfigTable).where(eq(appConfigTable.key, "admin_api_key")).limit(1);
   const authorizedByBootstrap = !!bootstrap && safeEqual(suppliedBootstrap, bootstrap);
-  const authorizedByLegacyKey = !!legacyConfig?.value && safeEqual(suppliedLegacyKey, legacyConfig.value);
+  const legacyKey = legacyConfig?.value ? decryptConfigValue(legacyConfig.value) : "";
+  const authorizedByLegacyKey = !!legacyKey && safeEqual(suppliedLegacyKey, legacyKey);
   if (!authorizedByBootstrap && !authorizedByLegacyKey) { res.status(401).json({ error: "Invalid bootstrap token or legacy admin key." }); return; }
   const username = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === "string" ? req.body.password : "";
@@ -87,7 +84,7 @@ router.post("/login", async (req, res): Promise<void> => {
   const ip = req.socket.remoteAddress ?? "unknown";
   const username = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (limited(`login:${ip}:${username}`)) { res.status(429).json({ error: "Too many login attempts. Try again later." }); return; }
+  if (await limited(`login:${ip}:${username}`)) { res.status(429).json({ error: "Too many login attempts. Try again later." }); return; }
   try {
     const [user] = await db.select().from(adminUsersTable).where(eq(adminUsersTable.username, username)).limit(1);
     if (!user || !verifyPassword(password, user.passwordHash)) { res.status(401).json({ error: "Invalid username or password." }); return; }

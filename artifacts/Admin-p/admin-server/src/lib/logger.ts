@@ -3,6 +3,10 @@ import pino from "pino";
 const isProduction = process.env.NODE_ENV === "production";
 
 export const logger = pino({
+  base: {
+    service: process.env["SERVICE_NAME"] ?? "admin-server",
+    environment: process.env.NODE_ENV ?? "development",
+  },
   level: process.env.LOG_LEVEL ?? "info",
   redact: [
     "req.headers.authorization",

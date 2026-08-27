@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Globe, Plus, Trash2, RefreshCw, Loader2, AlertTriangle,
-  CheckCircle2, XCircle, Clock, Upload, X, Wifi, WifiOff,
+  Clock, Upload, X, Wifi, WifiOff,
 } from "lucide-react";
 import { adminUrl, authFetch } from "@/lib/api";
 
@@ -297,7 +297,9 @@ export default function Proxies() {
                 >
                   {/* Status indicator + number */}
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <StatusIcon size={12} color={statusColor} title={p.status === "reachable" ? `${p.latency_ms}ms` : p.status ?? "untested"} />
+                    <span title={p.status === "reachable" ? `${p.latency_ms}ms` : p.status ?? "untested"}>
+                      <StatusIcon size={12} color={statusColor} aria-hidden="true" />
+                    </span>
                     <span style={{ fontSize: 11, color: "#374151" }}>{i + 1}</span>
                   </div>
 

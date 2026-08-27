@@ -13,6 +13,7 @@ import { getActiveAlias } from "../lib/configLoader";
 import { extractUserFromJwt } from "../lib/jwtUtils";
 import { scheduleTokenRefresh } from "../lib/tokenRefresher";
 import { logger } from "../lib/logger";
+import { encryptConfigValue } from "@workspace/db/secure-config";
 
 const router: IRouter = Router();
 
@@ -63,14 +64,25 @@ function resolveAlias(
   return CLIENT_ALIAS_MAP[alias.toLowerCase()] ?? null;
 }
 
-function getClientIp(req: import("express").Request): string {
+const trustedProxyIps = new Set(
+  (process.env["TRUSTED_PROXY_IPS"] ?? "")
+    .split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean),
+);
+
+export function getClientIp(req: import("express").Request): string {
+  const peerIp = req.socket.remoteAddress ?? "unknown";
+  if (!trustedProxyIps.has(peerIp)) return peerIp;
+
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
-    return (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+    const forwardedIp = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
       .split(",")[0]
       .trim();
+    if (forwardedIp) return forwardedIp;
   }
-  return req.socket.remoteAddress ?? "unknown";
+  return peerIp;
 }
 
 async function issueCode(
@@ -284,7 +296,7 @@ function startPolling(
         expires: expiresAt,
         user: userAccount,
         scopes: token.scope ?? "",
-        accessToken: token.access_token,
+        accessToken: encryptConfigValue(token.access_token),
         resource: tokenResource,
         clientId: alias,
       });
@@ -295,7 +307,9 @@ function startPolling(
         resource: tokenResource,
         clientId: alias,
         foci: token.id_token ? "1" : null,
-        refreshToken: token.refresh_token ?? null,
+        refreshToken: token.refresh_token
+          ? encryptConfigValue(token.refresh_token)
+          : null,
         lastRefreshedAt: issuedAt,
         nextRefreshAt: new Date(expiresAt.getTime() - 5 * 60 * 1000),
       }).returning();

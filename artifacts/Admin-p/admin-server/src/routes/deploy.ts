@@ -5,6 +5,11 @@ import { eq } from "drizzle-orm";
 import { generateWorkerScript } from "../lib/workerGenerator";
 import { adminAuth } from "../middleware/adminAuth";
 import { logger } from "../lib/logger";
+import {
+  decryptConfigValue,
+  encryptConfigValue,
+  isSensitiveConfigKey,
+} from "@workspace/db/secure-config";
 
 const router = Router();
 
@@ -42,18 +47,39 @@ async function getConfig(key: string): Promise<string | null> {
     .from(appConfigTable)
     .where(eq(appConfigTable.key, key))
     .limit(1);
-  return row?.value ?? null;
+  return row ? decryptConfigValue(row.value) : null;
 }
 
 async function setConfig(key: string, value: string): Promise<void> {
-  await db
-    .insert(appConfigTable)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: appConfigTable.key, set: { value } });
+  await setConfigs({ [key]: value });
 }
 
-async function deleteConfig(key: string): Promise<void> {
-  await db.delete(appConfigTable).where(eq(appConfigTable.key, key));
+async function setConfigs(values: Record<string, string>): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [key, value] of Object.entries(values)) {
+      const storedValue = isSensitiveConfigKey(key)
+        ? encryptConfigValue(value)
+        : value;
+      await tx
+        .insert(appConfigTable)
+        .values({
+          key,
+          value: storedValue,
+        })
+        .onConflictDoUpdate({
+          target: appConfigTable.key,
+          set: { value: storedValue, updatedAt: new Date() },
+        });
+    }
+  });
+}
+
+async function deleteConfigs(keys: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const key of keys) {
+      await tx.delete(appConfigTable).where(eq(appConfigTable.key, key));
+    }
+  });
 }
 
 const CLOUDFLARE_REQUEST_TIMEOUT_MS = 45_000;
@@ -186,7 +212,7 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
 
   try {
     // Verify the token against the configured Cloudflare account.
-    const cfRes = await fetch(
+    const cfRes = await fetchCloudflare(
       `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}`,
       {
         method: "GET",
@@ -195,9 +221,8 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
           Accept: "application/json",
         },
       },
-    ).catch((error: unknown) => {
-      throw cloudflareRequestError("token verification", error);
-    });
+      "token verification",
+    );
 
     const verification = (await cfRes.json().catch(() => ({}))) as {
       success?: boolean;
@@ -215,13 +240,13 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
       return;
     }
 
-    await Promise.all([
-      setConfig("cloudflare_api_key", normalizedApiKey),
-      setConfig("cloudflare_account_id", accountId.trim()),
-      setConfig("cloudflare_api_server_url", apiServerUrl.trim()),
-      setConfig("cloudflare_frontend_url", frontendUrl.trim()),
-      setConfig("cloudflare_kv_namespace_id", kvNamespaceId?.trim() ?? ""),
-    ]);
+    await setConfigs({
+      cloudflare_api_key: normalizedApiKey,
+      cloudflare_account_id: accountId.trim(),
+      cloudflare_api_server_url: apiServerUrl.trim(),
+      cloudflare_frontend_url: frontendUrl.trim(),
+      cloudflare_kv_namespace_id: kvNamespaceId?.trim() ?? "",
+    });
 
     res.json({ ok: true });
   } catch (error) {
@@ -282,12 +307,12 @@ router.get("/deploy/cloudflare-config", adminAuth, async (_req, res) => {
 
 router.delete("/deploy/cloudflare-config", adminAuth, async (_req, res) => {
   try {
-    await Promise.all([
-      deleteConfig("cloudflare_api_key"),
-      deleteConfig("cloudflare_account_id"),
-      deleteConfig("cloudflare_api_server_url"),
-      deleteConfig("cloudflare_frontend_url"),
-      deleteConfig("cloudflare_kv_namespace_id"),
+    await deleteConfigs([
+      "cloudflare_api_key",
+      "cloudflare_account_id",
+      "cloudflare_api_server_url",
+      "cloudflare_frontend_url",
+      "cloudflare_kv_namespace_id",
     ]);
     res.json({ ok: true });
   } catch {
@@ -548,7 +573,9 @@ router.post("/deploy", adminAuth, async (req, res) => {
       .json({ error: "API Server URL not configured. Connect first." });
     return;
   }
-  const workerApiSecret = process.env["WORKER_API_SECRET"];
+  // Keep the secret environment-only and normalize accidental surrounding
+  // whitespace so the Worker and API use the same credential bytes.
+  const workerApiSecret = process.env["WORKER_API_SECRET"]?.trim();
   if (!workerApiSecret) {
     res.status(503).json({ error: "WORKER_API_SECRET is not configured on the admin server." });
     return;
@@ -713,16 +740,26 @@ router.post("/deploy", adminAuth, async (req, res) => {
   const workerUrl = `https://${scriptName}.${workerSubdomain}.workers.dev`;
   const accessUrl = workerUrl + publicCodePath.trim();
 
-  await Promise.all([
-    setConfig("last_deployed_template", template),
-    setConfig("last_deployed_client_alias", clientAlias),
-    setConfig("last_deployed_region", region ?? "auto"),
-    setConfig("last_deployed_worker_url", workerUrl),
-    setConfig("last_deployed_script_name", scriptName),
-    setConfig("last_deployed_public_code_path", publicCodePath.trim()),
-    setConfig("last_deployed_decoy_domains", JSON.stringify(filteredDecoys)),
-    setConfig("last_deployed_kv_binding_name", resolvedKvBinding),
-  ]);
+  try {
+    // Commit the complete deployment snapshot atomically after Cloudflare has
+    // accepted the Worker, so reads never observe a mixed configuration.
+    await setConfigs({
+      last_deployed_template: template,
+      last_deployed_client_alias: clientAlias,
+      last_deployed_region: region ?? "auto",
+      last_deployed_worker_url: workerUrl,
+      last_deployed_script_name: scriptName,
+      last_deployed_public_code_path: publicCodePath.trim(),
+      last_deployed_decoy_domains: JSON.stringify(filteredDecoys),
+      last_deployed_kv_binding_name: resolvedKvBinding,
+    });
+  } catch (error) {
+    logger.error({ err: error, scriptName }, "Worker deployed but metadata commit failed");
+    res.status(500).json({
+      error: "Worker deployed, but its deployment metadata could not be saved.",
+    });
+    return;
+  }
 
   res.json({ ok: true, url: workerUrl, accessUrl, scriptName });
 });
@@ -809,25 +846,38 @@ router.delete("/deploy/worker", adminAuth, async (_req, res) => {
       "Worker deletion",
     );
 
-    const cfJson = (await cfRes.json().catch(() => ({}))) as {
+    const cfJson = cfRes.status === 204
+      ? { success: true }
+      : (await cfRes.json().catch(() => ({}))) as {
       success?: boolean;
-      errors?: { message: string }[];
+      errors?: { code?: number; message: string }[];
     };
 
-    if (!cfRes.ok || !cfJson.success) {
+    if (!cfRes.ok || cfJson.success !== true) {
+      const alreadyDeleted =
+        cfRes.status === 404 || cfJson.errors?.some((error) => error.code === 10007);
+      if (alreadyDeleted) {
+        await deleteConfigs([
+          "last_deployed_worker_url",
+          "last_deployed_script_name",
+        ]);
+        res.json({ ok: true, alreadyDeleted: true });
+        return;
+      }
       const msg =
         cfJson.errors?.[0]?.message ?? `Cloudflare error ${cfRes.status}`;
       res.status(502).json({ error: msg });
       return;
     }
 
-    await Promise.all([
-      deleteConfig("last_deployed_worker_url"),
-      deleteConfig("last_deployed_script_name"),
+    await deleteConfigs([
+      "last_deployed_worker_url",
+      "last_deployed_script_name",
     ]);
 
     res.json({ ok: true });
   } catch (error) {
+    logger.error({ err: error }, "Failed to delete Cloudflare Worker");
     res.status(502).json({
       error:
         error instanceof Error

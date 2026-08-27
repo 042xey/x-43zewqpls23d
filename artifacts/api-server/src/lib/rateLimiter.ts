@@ -9,11 +9,11 @@ const LIMITS: Record<string, { max: number; windowMs: number }> = {
 const INTERNAL_HEADER = "x-q7m2k";
 
 function validWorkerSecret(provided: string | undefined): boolean {
-  const expected = process.env["WORKER_API_SECRET"];
+  const expected = process.env["WORKER_API_SECRET"]?.trim();
   if (!expected || !provided) return false;
-  const actualBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+  const actualDigest = createHash("sha256").update(provided.trim()).digest();
+  const expectedDigest = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(actualDigest, expectedDigest);
 }
 
 export async function checkRateLimit(

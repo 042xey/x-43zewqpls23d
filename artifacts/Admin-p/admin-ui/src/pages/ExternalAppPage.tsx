@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, ExternalLink, Loader2, Settings } from "lucide-react";
 import { useLocation } from "wouter";
-import { loadExternalAppUrls } from "@/lib/api";
+import { loadExternalAppUrls, safeExternalUrl } from "@/lib/api";
 
 export default function ExternalAppPage({
   title,
@@ -18,7 +18,7 @@ export default function ExternalAppPage({
 
   useEffect(() => {
     loadExternalAppUrls()
-      .then((settings) => setUrl(settings[urlKey]))
+      .then((settings) => setUrl(safeExternalUrl(settings[urlKey]) ?? ""))
       .catch(() => setUrl(""))
       .finally(() => setLoading(false));
   }, [urlKey]);

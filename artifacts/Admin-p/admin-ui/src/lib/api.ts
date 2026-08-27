@@ -1,5 +1,15 @@
 const PREFIX = (import.meta.env.VITE_ADMIN_ROUTE_PREFIX as string | undefined) ?? "admin";
 
+export function safeExternalUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function adminUrl(path: string): string {
   const clean = path.startsWith("/") ? path : `/${path}`;
   return `/api/${PREFIX}${clean}`;

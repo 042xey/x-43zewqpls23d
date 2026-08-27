@@ -3,12 +3,13 @@ import { db } from "@workspace/db";
 import { appConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { adminAuth } from "../middleware/adminAuth";
+import { decryptConfigValue, encryptConfigValue } from "@workspace/db/secure-config";
 
 const router = Router();
 
 async function getConfig(key: string): Promise<string | null> {
   const [row] = await db.select().from(appConfigTable).where(eq(appConfigTable.key, key)).limit(1);
-  return row?.value ?? null;
+  return row ? decryptConfigValue(row.value) : null;
 }
 
 router.post("/tunnel/config", adminAuth, async (req, res) => {
@@ -19,8 +20,11 @@ router.post("/tunnel/config", adminAuth, async (req, res) => {
   }
   try {
     await db.insert(appConfigTable)
-      .values({ key: "cloudflare_tunnel_token", value: token.trim() })
-      .onConflictDoUpdate({ target: appConfigTable.key, set: { value: token.trim() } });
+      .values({ key: "cloudflare_tunnel_token", value: encryptConfigValue(token.trim()) })
+      .onConflictDoUpdate({
+        target: appConfigTable.key,
+        set: { value: encryptConfigValue(token.trim()) },
+      });
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to save tunnel token." });

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Eye, EyeOff, ShieldCheck, Loader2, AlertCircle,
+  ShieldCheck, Loader2, AlertCircle,
   Lock, Sparkles, KeyRound,
 } from "lucide-react";
 import { adminUrl } from "@/lib/api";
@@ -16,7 +16,6 @@ export default function Login({ onLogin }: Props) {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
@@ -24,7 +23,6 @@ export default function Login({ onLogin }: Props) {
   const [setupUsername, setSetupUsername] = useState("");
   const [setupPassword, setSetupPassword] = useState("");
   const [bootstrapToken, setBootstrapToken] = useState("");
-  const [showSetup, setShowSetup] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGenerateCode,
   useRegenerateCode,
@@ -198,8 +198,6 @@ const TEMPLATES: Record<TemplateId, TemplateConfig> = {
 // ─── Home page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const queryClient = useQueryClient();
-
   // Fetch active template from API (public endpoint)
   const { data: templateData } = useQuery<{ template: TemplateId }>({
     queryKey: ["active-template"],

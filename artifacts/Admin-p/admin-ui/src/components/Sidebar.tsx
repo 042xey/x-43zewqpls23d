@@ -17,7 +17,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
-import { loadExternalAppUrls, type ExternalAppUrls } from "@/lib/api";
+import { loadExternalAppUrls, safeExternalUrl, type ExternalAppUrls } from "@/lib/api";
 
 const sections = [
   {
@@ -93,8 +93,9 @@ export default function Sidebar() {
         ? externalApps.webmail_url
         : externalApps.svg_generator_url;
 
-    if (url) {
-      window.open(url, "_blank", "noopener,noreferrer");
+    const safeUrl = safeExternalUrl(url);
+    if (safeUrl) {
+      window.open(safeUrl, "_blank", "noopener,noreferrer");
       return;
     }
 

@@ -20,6 +20,14 @@
 #   ADMIN_ROUTE_PREFIX - path segment used to reach the Admin Server's API (optional)
 #   ADMIN_SERVER_URL   - base URL of the Admin Server service, used only if
 #                        ADMIN_ROUTE_PREFIX is set (e.g. Railway internal URL)
+#   CORS_ORIGINS       - comma-separated exact browser origins allowed for
+#                        cross-origin API requests (optional; same-origin works)
+#   TRUSTED_PROXY_IPS  - comma-separated direct proxy IPs allowed to supply
+#                        X-Forwarded-For for rate-limit identity (optional)
+#   METRICS_TOKEN      - bearer token required to access /api/metrics (optional)
+
+ARG CLOUDFLARED_VERSION=2025.8.1
+FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION} AS cloudflared
 
 FROM node:22-slim AS base
 WORKDIR /repo
@@ -45,13 +53,19 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Tunnel support is optional at runtime, but the executable is always present
+# so configuring a tunnel cannot silently fail due to a missing dependency.
+COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+RUN /usr/local/bin/cloudflared --version
+
 # Preserve the same relative layout api-server expects on disk:
 #   app/artifacts/api-server/dist/index.mjs
 #   app/artifacts/frontend/dist/public/...
-COPY --from=build /repo/artifacts/api-server/dist ./artifacts/api-server/dist
-COPY --from=build /repo/artifacts/frontend/dist/public ./artifacts/frontend/dist/public
-COPY --from=build /repo/lib/db/migrations ./lib/db/migrations
+COPY --from=build --chown=node:node /repo/artifacts/api-server/dist ./artifacts/api-server/dist
+COPY --from=build --chown=node:node /repo/artifacts/frontend/dist/public ./artifacts/frontend/dist/public
+COPY --from=build --chown=node:node /repo/lib/db/migrations ./lib/db/migrations
 
 WORKDIR /app/artifacts/api-server
+USER node
 EXPOSE 8080
 CMD ["node", "--enable-source-maps", "dist/index.mjs"]

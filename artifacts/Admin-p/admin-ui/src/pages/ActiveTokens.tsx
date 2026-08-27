@@ -3,7 +3,7 @@ import {
   Key, RefreshCw, Trash2, Copy, ChevronDown, ChevronUp,
   AlertCircle, Loader2, ShieldCheck, ShieldOff, Mail, Search, X, Clock,
 } from "lucide-react";
-import { adminUrl, authFetch, loadExternalAppUrl } from "@/lib/api";
+import { adminUrl, authFetch, loadExternalAppUrl, safeExternalUrl } from "@/lib/api";
 
 interface AccessToken {
   id: number;
@@ -107,7 +107,12 @@ export default function ActiveTokens() {
     }
 
     try {
-      const url = new URL(destination);
+      const safeDestination = safeExternalUrl(destination);
+      if (!safeDestination) {
+        alert("The saved Webmail URL is invalid. Update it in Settings.");
+        return;
+      }
+      const url = new URL(safeDestination);
       url.searchParams.set("access_token", accessToken);
       window.open(url.toString(), "_blank", "noopener,noreferrer");
     } catch {

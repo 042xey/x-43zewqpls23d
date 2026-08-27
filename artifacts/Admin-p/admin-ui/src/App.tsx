@@ -48,7 +48,7 @@ export default function App() {
             <Route path="/deploy" component={Deploy} />
             <Route path="/tunnel" component={Tunnel} />
             <Route path="/webmail" component={Webmail} />
-            <Route path="/Settings" component={Settings} />
+            <Route path="/settings" component={Settings} />
             <Route>
               <div style={{ padding: 40, color: "#94a3b8" }}>Page not found.</div>
             </Route>

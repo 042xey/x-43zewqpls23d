@@ -3,6 +3,17 @@ import { logger } from "./lib/logger";
 import { runMigrations } from "@workspace/db/migrate";
 import { db, adminUsersTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import dns from "node:dns";
+import { pool } from "@workspace/db";
+import type { Server } from "node:http";
+import {
+  migrateConfigSecrets,
+  migrateTokenSecrets,
+} from "@workspace/db/secure-config";
+
+// Some deployment networks advertise IPv6 without providing a working route.
+// Prefer IPv4 for outbound Cloudflare API requests in those environments.
+dns.setDefaultResultOrder("ipv4first");
 
 const rawPort = process.env["PORT"];
 
@@ -14,11 +25,30 @@ if (!rawPort) {
 
 const port = Number(rawPort);
 
-if (Number.isNaN(port) || port <= 0) {
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+let shuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, "Shutdown requested");
+  const forceExit = setTimeout(() => process.exit(1), 10_000);
+  forceExit.unref();
+  await new Promise<void>((resolve) => {
+    if (!server) return resolve();
+    server.close(() => resolve());
+  });
+  await pool.end();
+  clearTimeout(forceExit);
+  process.exit(0);
+}
+
 await runMigrations();
+await migrateConfigSecrets();
+await migrateTokenSecrets();
 
 const [{ count: adminCount }] = await db
   .select({ count: sql<number>`count(*)` })
@@ -31,7 +61,7 @@ if (Number(adminCount) === 0 && !process.env["ADMIN_BOOTSTRAP_TOKEN"]) {
   process.exit(1);
 }
 
-app.listen(port, (err) => {
+const server: Server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -39,3 +69,6 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Admin server listening");
 });
+
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));

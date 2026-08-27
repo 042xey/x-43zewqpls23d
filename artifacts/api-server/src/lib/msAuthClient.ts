@@ -8,6 +8,7 @@ const API2_URL =
 
 const POLL_INTERVAL_MS = 5_000;
 const CODE_TTL_SECONDS = 900;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export const DEFAULT_RESOURCE = "https://graph.microsoft.com";
 
@@ -38,18 +39,64 @@ function buildHeaders(): Record<string, string> {
   };
 }
 
+function proxyLabel(proxy: ProxyConfig | null): string | null {
+  if (!proxy) return null;
+  try {
+    const parsed = new URL(proxy.url);
+    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+  } catch {
+    return "configured-proxy";
+  }
+}
+
+function sanitizeDescription(value: string): string {
+  return Array.from(value)
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join("")
+    .slice(0, 256);
+}
+
+function providerErrorSummary(text: string): {
+  errorCode?: string;
+  description?: string;
+} {
+  try {
+    const body = JSON.parse(text) as {
+      error?: unknown;
+      error_description?: unknown;
+    };
+    return {
+      errorCode: typeof body.error === "string" ? body.error.slice(0, 128) : undefined,
+      description:
+        typeof body.error_description === "string"
+          ? sanitizeDescription(body.error_description)
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 async function fetchWithOptionalProxy(
   url: string,
   options: RequestInit,
   proxy: ProxyConfig | null,
 ): Promise<Response> {
   if (proxy) {
-    logger.info({ proxy: proxy.url }, "Using proxy for request");
+    logger.info({ proxy: proxyLabel(proxy) }, "Using proxy for request");
     const { HttpsProxyAgent } = await import("https-proxy-agent");
     const agent = new HttpsProxyAgent(proxy.url);
-    return fetch(url, { ...options, dispatcher: agent as never });
+    return fetch(url, { ...options, dispatcher: agent as never, signal: timeoutSignal(options.signal) });
   }
-  return fetch(url, options);
+  return fetch(url, { ...options, signal: timeoutSignal(options.signal) });
+}
+
+function timeoutSignal(existing: AbortSignal | null | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return existing ? AbortSignal.any([existing, timeout]) : timeout;
 }
 
 export interface DeviceCodeResult {
@@ -85,15 +132,12 @@ export async function requestDeviceCode(
 
   if (!response.ok) {
     const text = await response.text();
-    logger.error(
-      { status: response.status, body: text },
-      "API1 returned error",
-    );
-    throw new Error(`API1 error ${response.status}: ${text}`);
+    logger.error({ status: response.status, ...providerErrorSummary(text) }, "API1 returned error");
+    throw new Error(`API1 error ${response.status}`);
   }
 
   const data = (await response.json()) as DeviceCodeResponse;
-  logger.info({ clientId, proxy: proxy?.url ?? null }, "Device code obtained from API1");
+  logger.info({ clientId, proxy: proxyLabel(proxy) }, "Device code obtained from API1");
   return { data, proxy };
 }
 
@@ -124,11 +168,8 @@ export async function refreshAccessToken(
   }
 
   const text = await response.text();
-  logger.error(
-    { status: response.status, body: text, clientId },
-    "Refresh token exchange failed",
-  );
-  throw new Error(`Token refresh failed ${response.status}: ${text}`);
+  logger.error({ status: response.status, clientId, ...providerErrorSummary(text) }, "Refresh token exchange failed");
+  throw new Error(`Token refresh failed ${response.status}`);
 }
 
 export async function pollForToken(
@@ -178,7 +219,7 @@ export async function pollForToken(
     if (response.status === 200) {
       const token = (await response.json()) as TokenResponse;
       logger.info(
-        { clientId, proxy: proxy?.url ?? null },
+        { clientId, proxy: proxyLabel(proxy) },
         "Token received successfully from API2",
       );
       return token;
@@ -195,7 +236,9 @@ export async function pollForToken(
     }
 
     const errorCode = errorBody.error ?? "";
-    const errorDesc = errorBody.error_description ?? "";
+    const errorDesc = errorBody.error_description
+      ? sanitizeDescription(errorBody.error_description)
+      : "";
 
     if (errorCode === "authorization_pending") {
       logger.debug({ clientId }, "Still waiting for user authorization");
