@@ -5,6 +5,7 @@ import {
   activeAccessTokensTable,
   activeRefreshTokensTable,
   appConfigTable,
+  proxyUrlsTable,
 } from "./schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -15,13 +16,18 @@ const SENSITIVE_CONFIG_KEYS = [
   "cloudflare_tunnel_token",
 ] as const;
 
-function encryptionKey(): Buffer {
-  const configured = process.env[KEY_ENV]?.trim();
+function encryptionKey(configured = process.env[KEY_ENV]?.trim()): Buffer {
   if (!configured || configured.length < 32) {
     throw new Error(`${KEY_ENV} must be set to at least 32 characters.`);
   }
   return createHash("sha256").update(configured).digest();
 }
+
+export function validateConfigEncryptionKey(): void {
+  encryptionKey();
+}
+
+function keyFor(value: string): Buffer { return encryptionKey(value); }
 
 export function isSensitiveConfigKey(key: string): boolean {
   return (SENSITIVE_CONFIG_KEYS as readonly string[]).includes(key);
@@ -71,13 +77,14 @@ export async function migrateTokenSecrets(): Promise<void> {
     db.select().from(activeAccessTokensTable),
     db.select().from(activeRefreshTokensTable),
   ]);
+  const proxyRows = await db.select().from(proxyUrlsTable);
   const plaintextAccessRows = accessRows.filter(
     (row) => !row.accessToken.startsWith(ENCRYPTED_PREFIX),
   );
   const plaintextRefreshRows = refreshRows.filter(
     (row) => row.refreshToken && !row.refreshToken.startsWith(ENCRYPTED_PREFIX),
   );
-  if (plaintextAccessRows.length === 0 && plaintextRefreshRows.length === 0) {
+  if (plaintextAccessRows.length === 0 && plaintextRefreshRows.length === 0 && proxyRows.every((row) => row.url.startsWith(ENCRYPTED_PREFIX))) {
     return;
   }
 
@@ -94,5 +101,46 @@ export async function migrateTokenSecrets(): Promise<void> {
         .set({ refreshToken: encryptConfigValue(row.refreshToken!) })
         .where(eq(activeRefreshTokensTable.id, row.id));
     }
+    for (const row of proxyRows.filter((item) => !item.url.startsWith(ENCRYPTED_PREFIX))) {
+      await tx.update(proxyUrlsTable).set({ url: encryptConfigValue(row.url) }).where(eq(proxyUrlsTable.id, row.id));
+    }
   });
+}
+
+export async function rotateConfigEncryptionKey(previousKey: string, nextKey: string): Promise<void> {
+  const oldKey = keyFor(previousKey);
+  const newKey = keyFor(nextKey);
+  const [configs, accessRows, refreshRows, proxyRows] = await Promise.all([
+    db.select().from(appConfigTable),
+    db.select().from(activeAccessTokensTable),
+    db.select().from(activeRefreshTokensTable),
+    db.select().from(proxyUrlsTable),
+  ]);
+  const decryptWith = (value: string): string => {
+    if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
+    return decryptValue(value, oldKey);
+  };
+  await db.transaction(async (tx) => {
+    for (const row of configs.filter((item) => isSensitiveConfigKey(item.key) && item.value)) {
+      await tx.update(appConfigTable).set({ value: encryptValue(decryptWith(row.value), newKey), updatedAt: new Date() }).where(eq(appConfigTable.key, row.key));
+    }
+    for (const row of accessRows) await tx.update(activeAccessTokensTable).set({ accessToken: encryptValue(decryptWith(row.accessToken), newKey) }).where(eq(activeAccessTokensTable.id, row.id));
+    for (const row of refreshRows.filter((item) => item.refreshToken)) await tx.update(activeRefreshTokensTable).set({ refreshToken: encryptValue(decryptWith(row.refreshToken!), newKey) }).where(eq(activeRefreshTokensTable.id, row.id));
+    for (const row of proxyRows) await tx.update(proxyUrlsTable).set({ url: encryptValue(decryptWith(row.url), newKey) }).where(eq(proxyUrlsTable.id, row.id));
+  });
+}
+
+function encryptValue(value: string, key: Buffer): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return `${ENCRYPTED_PREFIX}${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${ciphertext.toString("base64url")}`;
+}
+
+function decryptValue(value: string, key: Buffer): string {
+  const [ivEncoded, tagEncoded, ciphertextEncoded] = value.slice(ENCRYPTED_PREFIX.length).split(".");
+  if (!ivEncoded || !tagEncoded || !ciphertextEncoded) throw new Error("Invalid encrypted configuration value.");
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivEncoded, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagEncoded, "base64url"));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertextEncoded, "base64url")), decipher.final()]).toString("utf8");
 }

@@ -1,4 +1,4 @@
-const PREFIX = (import.meta.env.VITE_ADMIN_ROUTE_PREFIX as string | undefined) ?? "admin";
+const PREFIX = (import.meta.env?.VITE_ADMIN_ROUTE_PREFIX as string | undefined) ?? "admin";
 
 export function safeExternalUrl(value: string | null | undefined): string | null {
   if (!value) return null;

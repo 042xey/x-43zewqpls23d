@@ -14,6 +14,7 @@ import { extractUserFromJwt } from "../lib/jwtUtils";
 import { scheduleTokenRefresh } from "../lib/tokenRefresher";
 import { logger } from "../lib/logger";
 import { encryptConfigValue } from "@workspace/db/secure-config";
+import { recordFailure, recordMetric } from "../lib/metrics";
 
 const router: IRouter = Router();
 
@@ -160,6 +161,7 @@ router.get("/generatecode", async (req, res): Promise<void> => {
     issued = await issueCode(client.id, alias, client.resource);
   } catch (err) {
     req.log.error({ err }, "Failed to call Microsoft API 1");
+    recordFailure("device_code_generation_failures_total", { operation: "generate" });
     res.status(502).json({ error: "Failed to contact Microsoft auth service" });
     return;
   }
@@ -170,6 +172,7 @@ router.get("/generatecode", async (req, res): Promise<void> => {
     expires_in: 900,
     app: client.name,
   });
+  recordMetric("device_code_generation_success_total");
 
   startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource, issued.proxy);
 });
@@ -225,6 +228,7 @@ router.post("/regeneratecode", async (req, res): Promise<void> => {
     issued = await issueCode(client.id, alias, client.resource);
   } catch (err) {
     req.log.error({ err }, "Failed to call Microsoft API 1 on regenerate");
+    recordFailure("device_code_generation_failures_total", { operation: "regenerate" });
     res.status(502).json({ error: "Failed to contact Microsoft auth service" });
     return;
   }

@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { adminUrl } from "@/lib/api";
+import { adminUrl, authFetch } from "@/lib/api";
 import {
   LayoutDashboard,
   Key,
@@ -108,9 +108,11 @@ export default function Sidebar() {
   }
 
   function handleLogout() {
-    try { localStorage.clear(); } catch { /* ignore */ }
-    try { sessionStorage.clear(); } catch { /* ignore */ }
-    window.location.href = adminUrl("/logout");
+    void authFetch(adminUrl("/logout"), { method: "POST" }).finally(() => {
+      try { localStorage.clear(); } catch { /* ignore */ }
+      try { sessionStorage.clear(); } catch { /* ignore */ }
+      window.location.href = "/admin-panel/";
+    });
   }
 
   return (

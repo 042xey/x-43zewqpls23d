@@ -71,6 +71,19 @@ export async function deleteSession(token: string): Promise<void> {
   await db.delete(adminSessionsTable).where(eq(adminSessionsTable.tokenHash, hashToken(token)));
 }
 
+export async function isSensitiveActionLimited(key: string): Promise<boolean> {
+  const bucketKey = createHash("sha256").update(`admin-action:${key}`).digest("hex");
+  const resetAt = new Date(Date.now() + 60_000);
+  const result = await db.execute(sql`
+    insert into rate_limit_buckets (key, count, reset_at) values (${bucketKey}, 1, ${resetAt})
+    on conflict (key) do update set
+      count = case when rate_limit_buckets.reset_at <= now() then 1 else rate_limit_buckets.count + 1 end,
+      reset_at = case when rate_limit_buckets.reset_at <= now() then excluded.reset_at else rate_limit_buckets.reset_at end
+    returning count
+  `);
+  return Number((result.rows[0] as { count: number }).count) > 30;
+}
+
 export function getSessionToken(cookieHeader: string | undefined): string | null {
   const match = cookieHeader?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
   return match ? decodeURIComponent(match.slice(SESSION_COOKIE.length + 1)) : null;

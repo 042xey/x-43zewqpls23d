@@ -8,7 +8,8 @@
     "./schema": "./src/schema/index.ts",
     "./migrate": "./src/migrate.ts",
     "./cleanup": "./src/cleanup.ts",
-    "./secure-config": "./src/secureConfig.ts"
+    "./secure-config": "./src/secureConfig.ts",
+    "./metrics": "./src/metrics.ts"
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",

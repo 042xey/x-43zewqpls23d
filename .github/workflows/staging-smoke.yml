@@ -1,0 +1,28 @@
+name: Staging Smoke
+
+on:
+  workflow_dispatch:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'staging')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check staging API liveness and readiness
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          test -n "$STAGING_API_URL"
+          curl --fail --silent "$STAGING_API_URL/api/healthz"
+          curl --fail --silent "$STAGING_API_URL/api/readyz"
+      - name: Check staging admin liveness
+        env:
+          STAGING_ADMIN_URL: ${{ vars.STAGING_ADMIN_URL }}
+        run: |
+          test -n "$STAGING_ADMIN_URL"
+          curl --fail --silent "$STAGING_ADMIN_URL/api/healthz"

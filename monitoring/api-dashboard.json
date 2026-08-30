@@ -1,0 +1,17 @@
+{
+  "title": "Device Code API",
+  "source": "GET /api/metrics (Bearer METRICS_TOKEN)",
+  "refresh": "30s",
+  "panels": [
+    { "title": "Request rate", "metric": "http_requests_total", "type": "rate" },
+    { "title": "5xx error rate", "metric": "http_5xx_rate", "type": "gauge", "alert": ">= 0.05" },
+    { "title": "Request latency p95", "metric": "http_request_latency_p95_ms", "type": "timeseries", "alert": ">= 1000" },
+    { "title": "Active alerts", "metric": "alerts_active", "type": "stat" },
+    { "title": "Database pool", "metrics": ["db_pool_connections_total", "db_pool_connections_idle", "db_pool_waiting_requests"], "type": "timeseries" },
+    { "title": "Database health", "metrics": ["db_connection_errors_total", "db_readiness_failures_total", "cleanup_failures_total"], "type": "timeseries" },
+    { "title": "Token health", "metrics": ["token_refresh_success_total", "token_refresh_failures_total"], "type": "timeseries" },
+    { "title": "Microsoft and device code", "metrics": ["device_code_generation_success_total", "device_code_generation_failures_total", "microsoft_api_failures_total"], "type": "timeseries" },
+    { "title": "Proxy health", "metric": "proxy_refresh_failures_total", "type": "stat" },
+    { "title": "Tunnel state", "metrics": ["tunnel_starts_total", "tunnel_failures_total", "tunnel_unexpected_exits_total"], "type": "timeseries" }
+  ]
+}

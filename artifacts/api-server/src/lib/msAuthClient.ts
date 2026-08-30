@@ -1,5 +1,7 @@
 import { getNextProxy, type ProxyConfig } from "./proxyRotator";
 import { logger } from "./logger";
+import { traceHeaders } from "./tracing";
+import { shutdownSignal } from "./shutdown";
 
 const API1_URL =
   "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0";
@@ -9,6 +11,13 @@ const API2_URL =
 const POLL_INTERVAL_MS = 5_000;
 const CODE_TTL_SECONDS = 900;
 const REQUEST_TIMEOUT_MS = 30_000;
+
+class ProviderRequestError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
 
 export const DEFAULT_RESOURCE = "https://graph.microsoft.com";
 
@@ -89,14 +98,14 @@ async function fetchWithOptionalProxy(
     logger.info({ proxy: proxyLabel(proxy) }, "Using proxy for request");
     const { HttpsProxyAgent } = await import("https-proxy-agent");
     const agent = new HttpsProxyAgent(proxy.url);
-    return fetch(url, { ...options, dispatcher: agent as never, signal: timeoutSignal(options.signal) });
+    return fetch(url, { ...options, headers: { ...traceHeaders(), ...options.headers }, dispatcher: agent as never, signal: timeoutSignal(options.signal) });
   }
-  return fetch(url, { ...options, signal: timeoutSignal(options.signal) });
+  return fetch(url, { ...options, headers: { ...traceHeaders(), ...options.headers }, signal: timeoutSignal(options.signal) });
 }
 
 function timeoutSignal(existing: AbortSignal | null | undefined): AbortSignal {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  return existing ? AbortSignal.any([existing, timeout]) : timeout;
+  return AbortSignal.any([shutdownSignal(), ...(existing ? [existing] : []), timeout]);
 }
 
 export interface DeviceCodeResult {
@@ -133,6 +142,8 @@ export async function requestDeviceCode(
   if (!response.ok) {
     const text = await response.text();
     logger.error({ status: response.status, ...providerErrorSummary(text) }, "API1 returned error");
+    const { recordFailure } = await import("./metrics");
+    recordFailure("microsoft_api_failures_total", { operation: "device_code" });
     throw new Error(`API1 error ${response.status}`);
   }
 
@@ -168,8 +179,10 @@ export async function refreshAccessToken(
   }
 
   const text = await response.text();
+  const { recordFailure } = await import("./metrics");
+  recordFailure("microsoft_api_failures_total", { operation: "refresh" });
   logger.error({ status: response.status, clientId, ...providerErrorSummary(text) }, "Refresh token exchange failed");
-  throw new Error(`Token refresh failed ${response.status}`);
+  throw new ProviderRequestError(`Token refresh failed ${response.status}`, response.status);
 }
 
 export async function pollForToken(
@@ -213,6 +226,8 @@ export async function pollForToken(
       );
     } catch (err) {
       logger.warn({ err }, "Polling request failed, retrying");
+      const { recordFailure } = await import("./metrics");
+      recordFailure("microsoft_api_failures_total", { operation: "poll" });
       continue;
     }
 

@@ -15,8 +15,8 @@ import externalAppsRouter from "./externalApps";
 const router: IRouter = Router();
 
 const prefix = process.env["ADMIN_ROUTE_PREFIX"];
-if (!prefix) {
-  throw new Error("ADMIN_ROUTE_PREFIX env var is not set — admin routes cannot be mounted.");
+if (!prefix || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prefix)) {
+  throw new Error("ADMIN_ROUTE_PREFIX must contain lowercase letters, numbers, and single hyphens only.");
 }
 
 const adminRouter: IRouter = Router();

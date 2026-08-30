@@ -6,6 +6,7 @@ import { adminAuth } from "../middleware/adminAuth";
 import { createSession, deleteSession, getSessionToken, hashPassword, newCsrfToken, normalizeUsername, csrfCookieName, sessionCookieName, verifyPassword } from "../lib/auth";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { decryptConfigValue } from "@workspace/db/secure-config";
+import { audit } from "../lib/audit";
 
 const router = Router();
 const MAX_ATTEMPTS = 5;
@@ -51,10 +52,11 @@ router.post("/setup", async (req, res): Promise<void> => {
   const ip = req.socket.remoteAddress ?? "unknown";
   if (await limited(`setup:${ip}`)) { res.status(429).json({ error: "Too many setup attempts. Try again later." }); return; }
   const bootstrap = process.env["ADMIN_BOOTSTRAP_TOKEN"];
+  const bootstrapExpiry = process.env["ADMIN_BOOTSTRAP_TOKEN_EXPIRES_AT"];
   const suppliedBootstrap = typeof req.headers["x-bootstrap-token"] === "string" ? req.headers["x-bootstrap-token"] : "";
   const suppliedLegacyKey = typeof req.headers["x-admin-key"] === "string" ? req.headers["x-admin-key"] : "";
   const [legacyConfig] = await db.select({ value: appConfigTable.value }).from(appConfigTable).where(eq(appConfigTable.key, "admin_api_key")).limit(1);
-  const authorizedByBootstrap = !!bootstrap && safeEqual(suppliedBootstrap, bootstrap);
+  const authorizedByBootstrap = !!bootstrap && (!bootstrapExpiry || Number.isFinite(Date.parse(bootstrapExpiry)) && Date.now() < Date.parse(bootstrapExpiry)) && safeEqual(suppliedBootstrap, bootstrap);
   const legacyKey = legacyConfig?.value ? decryptConfigValue(legacyConfig.value) : "";
   const authorizedByLegacyKey = !!legacyKey && safeEqual(suppliedLegacyKey, legacyKey);
   if (!authorizedByBootstrap && !authorizedByLegacyKey) { res.status(401).json({ error: "Invalid bootstrap token or legacy admin key." }); return; }
@@ -76,6 +78,7 @@ router.post("/setup", async (req, res): Promise<void> => {
     if (!result) { res.status(409).json({ error: "Admin account is already configured." }); return; }
     const session = await createSession(result.id);
     setSessionCookies(res, session);
+    audit(req, "admin_bootstrap", "admin_user", String(result.id));
     res.json({ ok: true });
   } catch { res.status(503).json({ error: "Admin schema is not ready. Apply the database schema first." }); }
 });
@@ -90,15 +93,17 @@ router.post("/login", async (req, res): Promise<void> => {
     if (!user || !verifyPassword(password, user.passwordHash)) { res.status(401).json({ error: "Invalid username or password." }); return; }
     const session = await createSession(user.id);
     setSessionCookies(res, session);
+    audit(req, "admin_login", "admin_user", String(user.id));
     res.json({ ok: true });
   } catch {
     res.status(503).json({ error: "Admin schema is not ready. Apply the database schema first." });
   }
 });
 
-router.get("/logout", async (req, res) => {
+router.post("/logout", adminAuth, async (req, res) => {
   const token = getSessionToken(req.headers.cookie);
   if (token) await deleteSession(token);
+  audit(req, "admin_logout", "admin_session");
   res.clearCookie(sessionCookieName, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/" });
   res.clearCookie(csrfCookieName, { secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/" }).redirect("/");
 });

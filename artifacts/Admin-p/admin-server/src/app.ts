@@ -15,6 +15,16 @@ import { recordHttpRequest } from "./lib/metrics";
 
 const app: Express = express();
 
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,
@@ -63,6 +73,14 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "32kb" }));
 app.use(express.urlencoded({ extended: true, limit: "32kb" }));
+app.use((req, res, next) => {
+  const input = JSON.stringify({ body: req.body, query: req.query, params: req.params });
+  if (input.length > 64 * 1024 || /"[^"\\]{4097}/.test(input)) {
+    res.status(413).json({ error: "Request input is too large." });
+    return;
+  }
+  next();
+});
 
 app.use("/api", router);
 

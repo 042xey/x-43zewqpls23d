@@ -4,6 +4,7 @@ import { appConfigTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { adminAuth } from "../middleware/adminAuth";
 import { decryptConfigValue, encryptConfigValue } from "@workspace/db/secure-config";
+import { audit } from "../lib/audit";
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.post("/tunnel/config", adminAuth, async (req, res) => {
         set: { value: encryptConfigValue(token.trim()) },
       });
     res.json({ ok: true });
+    audit(req, "tunnel_configuration_changed", "tunnel");
   } catch {
     res.status(500).json({ error: "Failed to save tunnel token." });
   }
@@ -43,13 +45,14 @@ router.get("/tunnel/status", adminAuth, async (_req, res) => {
   }
 });
 
-router.delete("/tunnel/config", adminAuth, async (_req, res) => {
+router.delete("/tunnel/config", adminAuth, async (req, res) => {
   try {
     await Promise.all([
       db.delete(appConfigTable).where(eq(appConfigTable.key, "cloudflare_tunnel_token")),
       db.delete(appConfigTable).where(eq(appConfigTable.key, "cloudflare_tunnel_url")),
     ]);
     res.json({ ok: true });
+    audit(req, "tunnel_configuration_deleted", "tunnel");
   } catch {
     res.status(500).json({ error: "Failed to remove tunnel config." });
   }

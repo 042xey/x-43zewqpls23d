@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { logger } from "../lib/logger";
-import { csrfCookieName, getSessionToken, getSessionUser } from "../lib/auth";
+import { csrfCookieName, getSessionToken, getSessionUser, isSensitiveActionLimited } from "../lib/auth";
+import { audit } from "../lib/audit";
 
 export async function adminAuth(
   req: Request,
@@ -14,8 +15,13 @@ export async function adminAuth(
     res.status(401).json({ error: "Unauthorized." });
     return;
   }
+  res.locals.adminUserId = user.id;
 
   if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    if (await isSensitiveActionLimited(`${user.id}:${req.path}`)) {
+      res.status(429).json({ error: "Too many administrative actions. Try again later." });
+      return;
+    }
     const cookies = Object.fromEntries((req.headers.cookie ?? "").split(";").filter(Boolean).map((part) => {
       const [key, ...value] = part.trim().split("=");
       return [key, decodeURIComponent(value.join("="))];
@@ -24,6 +30,7 @@ export async function adminAuth(
       res.status(403).json({ error: "CSRF validation failed." });
       return;
     }
+    audit(req, "privileged_admin_action", "route", req.path, { method: req.method });
   }
 
   next();

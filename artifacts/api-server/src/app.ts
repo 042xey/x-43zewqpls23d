@@ -12,10 +12,22 @@ import { randomUUID } from "node:crypto";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { recordHttpRequest } from "./lib/metrics";
+import { newTraceId, runWithTrace } from "./lib/tracing";
+import { shutdownSignal } from "./lib/shutdown";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
 
 app.use(
   pinoHttp({
@@ -45,9 +57,14 @@ app.use(
   }),
 );
 app.use((req, res, next) => {
+  const incoming = req.headers.traceparent;
+  const traceId = typeof incoming === "string" && /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/i.test(incoming)
+    ? incoming.split("-")[1]!
+    : (typeof req.headers["x-request-id"] === "string" ? req.headers["x-request-id"] : newTraceId());
+  res.setHeader("traceparent", `00-${traceId}-${"0".repeat(16)}-01`);
   const startedAt = Date.now();
   res.once("finish", () => recordHttpRequest(res.statusCode, Date.now() - startedAt));
-  next();
+  runWithTrace(traceId, next);
 });
 const corsOrigins = new Set(
   (process.env["CORS_ORIGINS"] ?? "")
@@ -65,6 +82,14 @@ app.use(
 );
 app.use(express.json({ limit: "32kb" }));
 app.use(express.urlencoded({ extended: true, limit: "32kb" }));
+app.use((req, res, next) => {
+  const input = JSON.stringify({ body: req.body, query: req.query, params: req.params });
+  if (input.length > 64 * 1024 || /"[^"\\]{4097}/.test(input)) {
+    res.status(413).json({ error: "Request input is too large." });
+    return;
+  }
+  next();
+});
 
 // ─── Admin panel proxy ────────────────────────────────────────────────────────
 // Forwards /admin-panel/* and /api/<admin-prefix>/* to the Admin Server so the
@@ -80,11 +105,15 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
 
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<globalThis.Response> {
   const controller = new AbortController();
+  const abort = () => controller.abort(shutdownSignal().reason);
+  if (shutdownSignal().aborted) abort();
+  else shutdownSignal().addEventListener("abort", abort, { once: true });
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+    shutdownSignal().removeEventListener("abort", abort);
   }
 }
 
@@ -120,7 +149,7 @@ async function proxyToAdmin(req: Request, res: Response): Promise<void> {
   try {
     const upstream = await fetchWithTimeout(target, {
       method: req.method,
-      headers,
+      headers: { ...headers, ...((await import("./lib/tracing")).traceHeaders()) },
       body,
       redirect: "manual",
     });
@@ -134,7 +163,10 @@ async function proxyToAdmin(req: Request, res: Response): Promise<void> {
     res.status(upstream.status);
     const buf = await upstream.arrayBuffer();
     res.end(Buffer.from(buf));
-  } catch {
+  } catch (err) {
+    const { recordFailure } = await import("./lib/metrics");
+    recordFailure("admin_proxy_failures_total");
+    req.log.warn({ err }, "Admin proxy request failed");
     if (!res.headersSent) {
       res.status(502).json({
         error: "Admin Server unavailable. Make sure the Admin Server is running and ADMIN_SERVER_URL is correct.",

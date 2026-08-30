@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { generateWorkerScript } from "../lib/workerGenerator";
 import { adminAuth } from "../middleware/adminAuth";
 import { logger } from "../lib/logger";
+import { audit } from "../lib/audit";
 import {
   decryptConfigValue,
   encryptConfigValue,
@@ -247,6 +248,7 @@ router.post("/deploy/cloudflare-config", adminAuth, async (req, res) => {
       cloudflare_frontend_url: frontendUrl.trim(),
       cloudflare_kv_namespace_id: kvNamespaceId?.trim() ?? "",
     });
+    audit(req, "cloudflare_configuration_changed", "deployment", undefined, { accountConfigured: true });
 
     res.json({ ok: true });
   } catch (error) {
@@ -585,6 +587,15 @@ router.post("/deploy", adminAuth, async (req, res) => {
       .status(400)
       .json({ error: "Frontend URL not configured. Connect first." });
     return;
+  }
+  for (const [label, value] of [["API Server URL", apiServerUrl], ["Frontend URL", frontendUrl]] as const) {
+    try {
+      const parsed = new URL(value);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported protocol");
+    } catch {
+      res.status(400).json({ error: `${label} must be a valid HTTP(S) URL.` });
+      return;
+    }
   }
 
   const resolvedKvBinding = kvBindingName?.trim() || "CODE_STORE";

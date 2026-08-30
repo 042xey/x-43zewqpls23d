@@ -13,6 +13,7 @@ import {
   decryptConfigValue,
   encryptConfigValue,
 } from "@workspace/db/secure-config";
+import { audit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -130,7 +131,8 @@ router.delete(
         res.status(404).json({ error: "Access token not found" });
         return;
       }
-      res.json({ deleted: true, type: "access", id });
+       audit(req, "token_deleted", "access_token", String(id));
+       res.json({ deleted: true, type: "access", id });
     } else {
       const [deleted] = await db
         .delete(activeRefreshTokensTable)
@@ -141,7 +143,8 @@ router.delete(
         res.status(404).json({ error: "Refresh token not found" });
         return;
       }
-      res.json({ deleted: true, type: "refresh", id });
+       audit(req, "token_deleted", "refresh_token", String(id));
+       res.json({ deleted: true, type: "refresh", id });
     }
   },
 );
@@ -190,6 +193,7 @@ router.post(
       if (row) deleted.push({ id, type: "refresh" });
     }
 
+    audit(req, "tokens_bulk_deleted", "token_set", undefined, { count: deleted.length });
     res.json({ deleted, count: deleted.length, requested: items.length });
   },
 );
@@ -327,6 +331,8 @@ router.post(
       }
 
       res.json({ access_token: result.access_token });
+      audit(req, "token_refreshed", "refresh_token", String(result.access_token.id));
+      audit(req, "token_revealed", "access_token", String(result.access_token.id));
     } catch (err) {
       if (err instanceof RefreshGrantError) {
         await db
@@ -338,11 +344,12 @@ router.post(
           error:
             "This refresh token has been invalidated by Microsoft (invalid_grant) and can no longer be used. Generate a new device code to re-authenticate.",
         });
+        audit(req, "token_invalidated", "refresh_token", String(id), { reason: "invalid_grant" });
         return;
       }
 
       res.status(502).json({
-        error: err instanceof Error ? err.message : "Failed to refresh access token",
+        error: "Failed to refresh access token",
       });
     }
   },

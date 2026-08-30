@@ -111,6 +111,10 @@ async function proxyRandomSite(request) {
     ['x-frame-options','content-security-policy','content-security-policy-report-only',
      'cross-origin-opener-policy','cross-origin-embedder-policy',
      'cross-origin-resource-policy'].forEach(k => h.delete(k));
+    h.set('X-Content-Type-Options', 'nosniff');
+    h.set('X-Frame-Options', 'DENY');
+    h.set('Content-Security-Policy', "frame-ancestors 'none'; object-src 'none'; base-uri 'none'");
+    h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
   } catch (_) {
     return new Response('<!DOCTYPE html><html><head><title></title></head><body></body></html>',
@@ -244,8 +248,12 @@ function frontendResponse(response, requestedPath, upstreamUrl) {
     // hostname breaks scripts and framing.
     'content-security-policy', 'content-security-policy-report-only',
     'x-frame-options', 'cross-origin-opener-policy',
-    'cross-origin-embedder-policy', 'cross-origin-resource-policy',
+   'cross-origin-embedder-policy', 'cross-origin-resource-policy',
   ].forEach(name => headers.delete(name));
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Content-Security-Policy', "frame-ancestors 'none'; object-src 'none'; base-uri 'none'");
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   const location = headers.get('Location');
   const rewrittenLocation = rewriteFrontendLocation(location, upstreamUrl);
   if (rewrittenLocation) headers.set('Location', rewrittenLocation);

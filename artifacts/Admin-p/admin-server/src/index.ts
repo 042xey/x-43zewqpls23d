@@ -9,6 +9,7 @@ import type { Server } from "node:http";
 import {
   migrateConfigSecrets,
   migrateTokenSecrets,
+  validateConfigEncryptionKey,
 } from "@workspace/db/secure-config";
 
 // Some deployment networks advertise IPv6 without providing a working route.
@@ -22,6 +23,15 @@ if (!rawPort) {
     "PORT environment variable is required but was not provided.",
   );
 }
+
+const routePrefix = process.env["ADMIN_ROUTE_PREFIX"]?.trim();
+if (!routePrefix || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(routePrefix)) {
+  throw new Error("ADMIN_ROUTE_PREFIX must contain lowercase letters, numbers, and single hyphens only.");
+}
+if (process.env.NODE_ENV === "production" && process.env["ADMIN_BOOTSTRAP_TOKEN"] && !process.env["ADMIN_BOOTSTRAP_TOKEN_EXPIRES_AT"]) {
+  throw new Error("ADMIN_BOOTSTRAP_TOKEN_EXPIRES_AT is required when ADMIN_BOOTSTRAP_TOKEN is configured in production.");
+}
+validateConfigEncryptionKey();
 
 const port = Number(rawPort);
 
@@ -46,9 +56,13 @@ async function shutdown(signal: string): Promise<void> {
   process.exit(0);
 }
 
-await runMigrations();
-await migrateConfigSecrets();
-await migrateTokenSecrets();
+if (process.env["RUN_MIGRATIONS_ON_STARTUP"] !== "false") {
+  await runMigrations();
+  await migrateConfigSecrets();
+  await migrateTokenSecrets();
+} else {
+  logger.info("Startup migrations disabled; schema must be managed by the release job");
+}
 
 const [{ count: adminCount }] = await db
   .select({ count: sql<number>`count(*)` })

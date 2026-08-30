@@ -5,6 +5,8 @@ import { db } from "@workspace/db";
 import { proxyUrlsTable } from "@workspace/db";
 import { adminAuth } from "../middleware/adminAuth";
 import { z } from "zod/v4";
+import { decryptConfigValue, encryptConfigValue } from "@workspace/db/secure-config";
+import { audit } from "../lib/audit";
 
 const router: IRouter = Router();
 const MAX_PROXIES = 100;
@@ -43,7 +45,7 @@ router.get("/proxies", adminAuth, async (_req, res): Promise<void> => {
     count: rows.length,
     proxies: rows.map((r) => ({
       id: r.id,
-       url: safeProxyUrl(r.url),
+       url: safeProxyUrl(decryptConfigValue(r.url)),
       added_at: r.addedAt.toISOString(),
     })),
   });
@@ -60,11 +62,12 @@ router.post("/proxies", adminAuth, async (req, res): Promise<void> => {
 
   if (parsed.data.proxies.length > 0) {
     await db.insert(proxyUrlsTable).values(
-      parsed.data.proxies.map((p) => ({ url: p.url })),
+      parsed.data.proxies.map((p) => ({ url: encryptConfigValue(p.url) })),
     );
   }
 
   req.log.info({ count: parsed.data.proxies.length }, "Proxy list replaced");
+  audit(req, "proxy_list_changed", "proxy_list", undefined, { count: parsed.data.proxies.length });
   res.json({ message: `${parsed.data.proxies.length} proxies configured`, count: parsed.data.proxies.length });
 });
 
@@ -79,9 +82,10 @@ router.post("/proxies/add", adminAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Proxy URL must start with http" });
     return;
   }
-  const [inserted] = await db.insert(proxyUrlsTable).values({ url }).returning();
+  const [inserted] = await db.insert(proxyUrlsTable).values({ url: encryptConfigValue(url) }).returning();
+  audit(req, "proxy_added", "proxy", String(inserted!.id));
   req.log.info({ proxy: safeProxyUrl(url) }, "Proxy added");
-  res.json({ id: inserted!.id, url: safeProxyUrl(inserted!.url), added_at: inserted!.addedAt.toISOString() });
+  res.json({ id: inserted!.id, url: safeProxyUrl(url), added_at: inserted!.addedAt.toISOString() });
 });
 
 router.delete("/proxies/:id", adminAuth, async (req, res): Promise<void> => {
@@ -99,6 +103,7 @@ router.delete("/proxies/:id", adminAuth, async (req, res): Promise<void> => {
     return;
   }
   req.log.info({ id }, "Proxy deleted");
+  audit(req, "proxy_deleted", "proxy", String(id));
   res.json({ deleted: true });
 });
 
@@ -124,13 +129,13 @@ router.post("/proxies/test", adminAuth, async (_req, res): Promise<void> => {
     const batch = rows.slice(offset, offset + TEST_CONCURRENCY);
     const batchResults = await Promise.all(batch.map(async (r) => {
       try {
-        const parsed = new URL(r.url);
+         const parsed = new URL(decryptConfigValue(r.url));
         const host = parsed.hostname;
         const port = parseInt(parsed.port) || (parsed.protocol === "https:" ? 443 : 80);
         const { ok, latencyMs } = await tcpTest(host, port);
-        return { id: r.id, url: safeProxyUrl(r.url), reachable: ok, latency_ms: latencyMs };
+         return { id: r.id, url: safeProxyUrl(decryptConfigValue(r.url)), reachable: ok, latency_ms: latencyMs };
       } catch {
-        return { id: r.id, url: r.url, reachable: false, latency_ms: null };
+        return { id: r.id, url: safeProxyUrl(decryptConfigValue(r.url)), reachable: false, latency_ms: null };
       }
     }));
     results.push(...batchResults);

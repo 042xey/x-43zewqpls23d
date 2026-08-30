@@ -27,7 +27,8 @@
 #   METRICS_TOKEN      - bearer token required to access /api/metrics (optional)
 
 ARG CLOUDFLARED_VERSION=2025.8.1
-FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION} AS cloudflared
+ARG CLOUDFLARED_DIGEST=sha256:b77d84e8704db38db22c22661cf7e56468c526e3a6a5fe9c8b7c151452fa1472
+FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION}@${CLOUDFLARED_DIGEST} AS cloudflared
 
 FROM node:22-slim AS base
 WORKDIR /repo
