@@ -27,7 +27,7 @@
 # The server refuses to start when no admin account exists unless
 # ADMIN_BOOTSTRAP_TOKEN is provided.
 
-FROM node:22-slim AS base
+FROM node:26-slim AS base
 WORKDIR /repo
 RUN corepack enable
 
@@ -47,7 +47,7 @@ RUN pnpm --filter @workspace/admin-ui run build
 RUN pnpm --filter @workspace/admin-server run build
 
 # ---- runtime: minimal image with only the built output -----------------------
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
