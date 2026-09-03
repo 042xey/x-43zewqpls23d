@@ -30,7 +30,7 @@ ARG CLOUDFLARED_VERSION=2025.8.1
 ARG CLOUDFLARED_DIGEST=sha256:b77d84e8704db38db22c22661cf7e56468c526e3a6a5fe9c8b7c151452fa1472
 FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION}@${CLOUDFLARED_DIGEST} AS cloudflared
 
-FROM node:22-slim AS base
+FROM node:26-slim AS base
 WORKDIR /repo
 RUN corepack enable
 
@@ -50,7 +50,7 @@ RUN pnpm --filter @workspace/frontend run build
 RUN pnpm --filter @workspace/api-server run build
 
 # ---- runtime: minimal image with only the built output -----------------------
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
