@@ -8,7 +8,7 @@ const safeDatabaseName = databaseUrl ? new URL(databaseUrl).pathname.slice(1) : 
 const enabled = Boolean(
   databaseUrl &&
     process.env["ALLOW_TEST_DATABASE"] === "YES" &&
-    /(?:^|[-_])test(?:[-_]|$)/i.test(safeDatabaseName),
+    /(?:^|[-_])test(?:[-_]|$)|^testdb$/i.test(safeDatabaseName),
 );
 
 let server: Server | undefined;
@@ -102,14 +102,27 @@ test("login, CSRF enforcement, and logout revocation work together", { skip: !en
   csrf = cookie.match(/admin_csrf=([^;]+)/)?.[1] ?? "";
 
   assert.equal((await request("/api/admin-test/ping")).status, 200);
+  assert.equal((await request("/api/admin-test/tokens")).status, 200);
+  assert.equal((await request("/api/admin-test/proxies")).status, 200);
+
   const csrfFailure = await request("/api/admin-test/external-apps/webmail", {
     method: "POST",
     body: JSON.stringify({ url: "https://example.com" }),
   });
   assert.equal(csrfFailure.status, 403);
 
+  const csrfSuccess = await request("/api/admin-test/external-apps", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ webmail_url: "", svg_generator_url: "" }),
+  });
+  assert.equal(csrfSuccess.status, 200);
+
+  assert.equal((await request("/api/admin-test/logout")).status, 404);
+
   const logout = await request("/api/admin-test/logout", {
     method: "POST",
+    redirect: "manual",
     headers: { "x-csrf-token": csrf },
   });
   assert.equal(logout.status, 302);

@@ -72,12 +72,26 @@ async function doRefresh(
 
   let token;
   try {
+    const refreshToken = decryptConfigValue(rtRow.refreshToken);
     token = await refreshAccessToken(
       clientId,
-      decryptConfigValue(rtRow.refreshToken),
+      refreshToken,
       resource,
     );
   } catch (err) {
+    if (err instanceof Error && err.message.includes("Unsupported state or unable to authenticate data")) {
+      await db
+        .update(activeRefreshTokensTable)
+        .set({
+          refreshToken: null,
+          invalidatedAt: new Date(),
+          invalidReason: "Refresh token could not be decrypted with the active encryption key. Re-authentication is required.",
+        })
+        .where(eq(activeRefreshTokensTable.id, refreshTokenId));
+      markBackgroundFailure("token_refresh", err, true);
+      logger.error({ refreshTokenId, alias }, "Refresh token could not be decrypted; token invalidated");
+      return;
+    }
     logger.warn({ err, refreshTokenId, alias, retry }, "Token refresh failed; scheduling retry");
     recordFailure("token_refresh_failures_total", { alias });
     markBackgroundFailure("token_refresh", err);
@@ -164,7 +178,7 @@ export async function resumeAllRefreshCycles(
 
   let resumed = 0;
   for (const row of rows) {
-    if (!row.refreshToken) continue;
+    if (!row.refreshToken || row.invalidatedAt) continue;
 
     const client = aliasMap[row.clientId];
     if (!client) continue;

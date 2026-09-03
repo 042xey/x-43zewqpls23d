@@ -20,6 +20,7 @@ jobs:
           test -n "$STAGING_API_URL"
           curl --fail --silent "$STAGING_API_URL/api/healthz"
           curl --fail --silent "$STAGING_API_URL/api/readyz"
+          curl --fail --silent "$STAGING_API_URL/api/background-status"
       - name: Check staging admin liveness
         env:
           STAGING_ADMIN_URL: ${{ vars.STAGING_ADMIN_URL }}

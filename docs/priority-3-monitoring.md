@@ -20,6 +20,13 @@ cleanup, proxy refresh, device-code generation, Microsoft API, token refresh,
 tunnel, and admin-proxy failures. `alerts_active` and `http_5xx_rate` provide
 the request-level alert state.
 
+Background jobs are also exposed through the authenticated `/api/metrics`
+endpoint. Alert on increases to `background_operation_failures_total` and on
+either `background_operations_degraded > 0` or
+`background_operations_failed > 0`. The `/api/background-status` endpoint
+returns the detailed operation state and responds with `503` while any
+operation is degraded or failed.
+
 ## Dashboard Panels
 
 Use `monitoring/api-dashboard.json` as the panel inventory for Grafana,

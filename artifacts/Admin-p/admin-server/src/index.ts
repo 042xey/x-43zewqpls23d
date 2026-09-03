@@ -9,6 +9,7 @@ import type { Server } from "node:http";
 import {
   migrateConfigSecrets,
   migrateTokenSecrets,
+  ensureEncryptionKeyFingerprint,
   validateConfigEncryptionKey,
 } from "@workspace/db/secure-config";
 
@@ -34,6 +35,8 @@ if (process.env.NODE_ENV === "production" && process.env["ADMIN_BOOTSTRAP_TOKEN"
 validateConfigEncryptionKey();
 
 const port = Number(rawPort);
+const host = process.env["HOST"]?.trim() ||
+  (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 
 if (!Number.isInteger(port) || port <= 0 || port > 65535) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
@@ -60,8 +63,10 @@ if (process.env["RUN_MIGRATIONS_ON_STARTUP"] !== "false") {
   await runMigrations();
   await migrateConfigSecrets();
   await migrateTokenSecrets();
+  await ensureEncryptionKeyFingerprint();
 } else {
   logger.info("Startup migrations disabled; schema must be managed by the release job");
+  await ensureEncryptionKeyFingerprint();
 }
 
 const [{ count: adminCount }] = await db
@@ -75,13 +80,13 @@ if (Number(adminCount) === 0 && !process.env["ADMIN_BOOTSTRAP_TOKEN"]) {
   process.exit(1);
 }
 
-const server: Server = app.listen(port, (err) => {
+const server: Server = app.listen(port, host, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
-  logger.info({ port }, "Admin server listening");
+  logger.info({ host, port }, "Admin server listening");
 });
 
 process.once("SIGTERM", () => void shutdown("SIGTERM"));

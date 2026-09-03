@@ -4,7 +4,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { adminSessionsTable, adminUsersTable } from "@workspace/db/schema";
 

@@ -1,5 +1,34 @@
 # Priority 7 Token and Secret Lifecycle
 
+## Secret handling
+
+Do not place `DATABASE_URL`, `CONFIG_ENCRYPTION_KEY`, bootstrap tokens, API keys,
+or refresh credentials directly in shell commands. Command lines can be retained
+in shell history and exposed through process inspection. In local development,
+store non-committed values in permission-restricted service-specific env files and use:
+
+```sh
+chmod 600 .env.admin.local .env.api.local
+ENV_FILE=.env.admin.local scripts/start-local.sh admin
+ENV_FILE=.env.api.local scripts/start-local.sh api
+```
+
+The launcher rejects files readable by group or other users and uses `exec` so
+the service process replaces the launcher. In production, configure the same
+variables in the deployment platform's protected secret store. Never commit
+these env files or print their contents.
+
+## Encryption-key lifecycle
+
+Each service records a SHA-256 fingerprint of `CONFIG_ENCRYPTION_KEY` in the
+database without storing the key itself. On later startup, a changed key is
+rejected before the service can use encrypted data. Keep the key in durable,
+protected secret management for the lifetime of the database.
+
+If the key is lost, encrypted values cannot be recovered. Restore the original
+key or follow the documented re-authentication and token invalidation process;
+do not replace the key directly.
+
 ## Encryption-key rotation
 
 Keep the current key in `CONFIG_ENCRYPTION_KEY` and place the replacement in a
@@ -14,8 +43,9 @@ pnpm --filter @workspace/scripts run rotate-secrets
 
 The job reads encrypted configuration, access tokens, refresh tokens, and proxy
 URLs using the old key and rewrites every value with the new key in one database
-transaction. Stop writers or use a maintenance window during the rotation, then
-restart both services with only the new key. Take and verify a backup first.
+transaction. It also updates the stored key fingerprint in that transaction.
+Stop writers or use a maintenance window during the rotation, then restart both
+services with only the new key. Take and verify a backup first.
 
 ## Worker secret rotation
 

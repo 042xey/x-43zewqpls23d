@@ -14,6 +14,7 @@ import { logger } from "./lib/logger";
 import { recordHttpRequest } from "./lib/metrics";
 
 const app: Express = express();
+app.disable("x-powered-by");
 
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");

@@ -15,6 +15,7 @@ import type { Server } from "node:http";
 import {
   migrateConfigSecrets,
   migrateTokenSecrets,
+  ensureEncryptionKeyFingerprint,
   validateConfigEncryptionKey,
 } from "@workspace/db/secure-config";
 
@@ -27,6 +28,8 @@ if (!rawPort) {
 }
 
 const port = Number(rawPort);
+const host = process.env["HOST"]?.trim() ||
+  (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 
 if (!Number.isInteger(port) || port <= 0 || port > 65535) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
@@ -96,8 +99,10 @@ Promise.all([
       await runMigrations();
       await migrateConfigSecrets();
       await migrateTokenSecrets();
+      await ensureEncryptionKeyFingerprint();
     } else {
       logger.info("Startup migrations disabled; schema must be managed by the release job");
+      await ensureEncryptionKeyFingerprint();
     }
   })(),
   initProxyRotator(),
@@ -108,14 +113,14 @@ Promise.all([
   stopProxy = proxyStop;
   stopConfig = configStop;
   stopRefresh = refreshStop;
-  server = app.listen(port, (err) => {
+  server = app.listen(port, host, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");
       process.exit(1);
     }
 
     stopCleanup = startCleanupScheduler();
-    logger.info({ port }, "Server listening");
+    logger.info({ host, port }, "Server listening");
   });
 }).catch((err) => {
   logger.error({ err }, "Failed to initialize server");

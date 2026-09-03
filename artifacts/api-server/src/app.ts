@@ -18,6 +18,7 @@ import { shutdownSignal } from "./lib/shutdown";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
+app.disable("x-powered-by");
 
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
