@@ -18,6 +18,16 @@ import { recordFailure, recordMetric } from "../lib/metrics";
 
 const router: IRouter = Router();
 
+const CODE_CACHE_TTL_MS = 15 * 60 * 1000;
+const codeCache = new Map<string, { data: object; expiresAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of codeCache) {
+    if (now >= entry.expiresAt) codeCache.delete(key);
+  }
+}, 60_000);
+
 export const CLIENT_ALIAS_MAP: Record<
   string,
   { id: string; name: string; resource: string }
@@ -154,6 +164,13 @@ router.get("/generatecode", async (req, res): Promise<void> => {
     return;
   }
 
+  const cacheKey = `${ip}:${alias}`;
+  const cached = codeCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    res.json(cached.data);
+    return;
+  }
+
   req.log.info({ ip, alias, app: client.name }, "Generating device code");
 
   let issued: Awaited<ReturnType<typeof issueCode>>;
@@ -166,12 +183,14 @@ router.get("/generatecode", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({
+  const responseData = {
     user_code: issued.user_code,
     expires_at: issued.expires_at.toISOString(),
     expires_in: 900,
     app: client.name,
-  });
+  };
+  codeCache.set(cacheKey, { data: responseData, expiresAt: issued.expires_at.getTime() });
+  res.json(responseData);
   recordMetric("device_code_generation_success_total");
 
   startPolling(issued.device_code, issued.user_code, client.id, alias, issued.resource, issued.proxy);

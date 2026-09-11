@@ -225,11 +225,17 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [regenerated, setRegenerated] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  
+  const [lastKnownCode, setLastKnownCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (codeData?.expires_in) setTimeLeft(codeData.expires_in);
-  }, [codeData]);
+    if (codeData?.user_code) setLastKnownCode(codeData.user_code);
+  }, [codeData?.user_code]);
+
+  useEffect(() => {
+    if (!codeData?.expires_at) return;
+    const remaining = Math.max(0, Math.ceil((new Date(codeData.expires_at).getTime() - Date.now()) / 1000));
+    setTimeLeft(remaining);
+  }, [codeData?.expires_at]);
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
@@ -321,7 +327,7 @@ export default function Home() {
                   className="text-5xl md:text-6xl font-mono tracking-widest font-bold text-white"
                   data-testid="text-user-code"
                 >
-                  {codeData?.user_code || "------"}
+                  {codeData?.user_code || lastKnownCode || "------"}
                 </div>
               )}
             </div>

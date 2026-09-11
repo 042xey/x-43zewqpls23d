@@ -359,14 +359,14 @@ function hasSession(request) {
 
 function clientKey(request) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const ua = (request.headers.get('User-Agent') || '').slice(0, 64).replace(/\\W/g, '_');
-  return 'code:' + ip + ':' + ua;
+  const cid = getCookie(request.headers.get('Cookie') || '', '_cid') || 'pending';
+  return 'code:' + ip + ':' + cid;
 }
 
 // ── Rate limiter ──────────────────────────────────────────────────────────────
 
 async function checkRateLimit(request, route, kv) {
-  if (!kv) return { allowed: true, remaining: 999 };
+  if (!kv) return { allowed: false, remaining: 0 };
 
   const limit = RATE_LIMITS[route];
   const ip    = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -655,18 +655,18 @@ export default {
         const rl = await checkRateLimit(request, 'regeneratecode', kv);
         if (!rl.allowed) return proxyRandomSite(request);
 
-        // Step 1: Invalidate the cached code so the client gets a genuinely new one.
         const key = clientKey(request);
-        if (kv) await kv.delete(key).catch(() => null);
 
-        // Step 2: Fetch a fresh code from the upstream generatecode endpoint.
+        // Fetch a fresh code from the upstream generatecode endpoint first,
+        // so the old cached code is preserved if the fetch fails.
         const target = new URL(API_ORIGIN + '/api/generatecode');
         target.searchParams.set('app', CLIENT_ALIAS);
         const res = await fetch(target.toString(), { headers: { 'X-Q7m2K': WORKER_API_SECRET }, cf: { cacheEverything: false } });
-        if (!res.ok) return proxyRandomSite(request);
+        if (!res.ok) {
+          return Response.json({ error: 'Upstream unavailable' }, { status: 502 });
+        }
 
-        // Step 3: Store the new code in KV so a subsequent page refresh returns
-        // the same new code (not a second fresh fetch).
+        // Store the new code in KV (overwrites the old entry at the same key).
         const data = await res.json();
         const cid = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
         if (kv) {
