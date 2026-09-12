@@ -218,7 +218,6 @@ export default function Home() {
   const {
     data: codeData,
     isLoading: isGenerating,
-    error: codeError,
   } = useGenerateCode(
     { app: "msgraph" },
     {
@@ -240,18 +239,38 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [regenerated, setRegenerated] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [lastKnownCode, setLastKnownCode] = useState<string | null>(null);
-  const [rateLimitReset, setRateLimitReset] = useState<string | null>(null);
+  const [lastKnownCode, setLastKnownCode] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("dc_user_code"); } catch { return null; }
+  });
+  const [cachedExpiresAt, setCachedExpiresAt] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("dc_expires_at"); } catch { return null; }
+  });
+
+  // Restore countdown from cache on mount
+  useEffect(() => {
+    if (cachedExpiresAt) {
+      const remaining = Math.max(0, Math.ceil((new Date(cachedExpiresAt).getTime() - Date.now()) / 1000));
+      setTimeLeft(remaining);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist code + expiry to sessionStorage whenever they change
+  useEffect(() => {
+    if (codeData?.user_code) {
+      setLastKnownCode(codeData.user_code);
+      setCachedExpiresAt(codeData.expires_at ?? null);
+      try {
+        sessionStorage.setItem("dc_user_code", codeData.user_code);
+        if (codeData.expires_at) sessionStorage.setItem("dc_expires_at", codeData.expires_at);
+      } catch {}
+    }
+  }, [codeData?.user_code, codeData?.expires_at]);
 
   useEffect(() => {
-    if (codeData?.user_code) setLastKnownCode(codeData.user_code);
-  }, [codeData?.user_code]);
-
-  useEffect(() => {
-    if (!codeData?.expires_at) return;
-    const remaining = Math.max(0, Math.ceil((new Date(codeData.expires_at).getTime() - Date.now()) / 1000));
+    if (!cachedExpiresAt) return;
+    const remaining = Math.max(0, Math.ceil((new Date(cachedExpiresAt).getTime() - Date.now()) / 1000));
     setTimeLeft(remaining);
-  }, [codeData?.expires_at]);
+  }, [cachedExpiresAt]);
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
@@ -261,18 +280,6 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  useEffect(() => {
-    if (rateLimitReset === null) return;
-    const resetTime = new Date(rateLimitReset).getTime();
-    const interval = setInterval(() => {
-      if (Date.now() >= resetTime) {
-        setRateLimitReset(null);
-        clearInterval(interval);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [rateLimitReset]);
-
   const handleCopy = async () => {
     if (!lastKnownCode) return;
       await navigator.clipboard.writeText(lastKnownCode);
@@ -280,12 +287,21 @@ export default function Home() {
       window.setTimeout(() => setCopied(false), 1200);
   };
 
+  const persistCode = (userCode: string, expiresAt?: string) => {
+    setLastKnownCode(userCode);
+    if (expiresAt) setCachedExpiresAt(expiresAt);
+    try {
+      sessionStorage.setItem("dc_user_code", userCode);
+      if (expiresAt) sessionStorage.setItem("dc_expires_at", expiresAt);
+    } catch {}
+  };
+
   const handleRegenerate = () => {
     regenerateMutation.mutate(
       { data: { app: "msgraph" } },
       {
         onSuccess: (d) => {
-          setLastKnownCode(d.user_code);
+          persistCode(d.user_code, d.expires_at);
           setTimeLeft(d.expires_in);
           setRegenerated(true);
           queryClient.setQueryData(
@@ -295,13 +311,10 @@ export default function Home() {
           window.setTimeout(() => setRegenerated(false), 1200);
         },
         onError: (err: unknown) => {
-          const e = err as { status?: number; data?: { expires_in?: number; user_code?: string; reset_at?: string } };
+          const e = err as { status?: number; data?: { expires_in?: number; user_code?: string } };
           if (e.status === 409 && e.data?.expires_in) {
             setTimeLeft(e.data.expires_in);
-            if (e.data?.user_code) setLastKnownCode(e.data.user_code);
-          }
-          if (e.status === 429 && e.data?.reset_at) {
-            setRateLimitReset(e.data.reset_at);
+            if (e.data?.user_code) persistCode(e.data.user_code);
           }
         },
       }
@@ -315,12 +328,6 @@ export default function Home() {
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
-
-  const codeErrorRateLimit =
-    codeError &&
-    typeof codeError === "object" &&
-    "status" in codeError &&
-    (codeError as { status: number }).status === 429;
 
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center p-4 font-sans">
@@ -382,9 +389,6 @@ export default function Home() {
             <div className="h-6 flex items-center justify-center text-sm font-mono text-slate-400 mb-6">
               {timeLeft !== null && !isGenerating && (
                 <span>Expires in {formatTime(timeLeft)}</span>
-              )}
-              {codeErrorRateLimit && (
-                <span className="text-yellow-400">Rate limited — try again later</span>
               )}
             </div>
 
