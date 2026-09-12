@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGenerateCode,
   useRegenerateCode,
   getGenerateCodeQueryKey,
 } from "@workspace/api-client-react";
-import { Copy, RefreshCw, ExternalLink } from "lucide-react";
+import { Copy, RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
 
 // ─── Brand SVG Logos ─────────────────────────────────────────────────────────
 
@@ -198,6 +198,8 @@ const TEMPLATES: Record<TemplateId, TemplateConfig> = {
 // ─── Home page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
+  const queryClient = useQueryClient();
+
   // Fetch active template from API (public endpoint)
   const { data: templateData } = useQuery<{ template: TemplateId }>({
     queryKey: ["active-template"],
@@ -216,16 +218,30 @@ export default function Home() {
   const {
     data: codeData,
     isLoading: isGenerating,
+    error: codeError,
   } = useGenerateCode(
     { app: "msgraph" },
-    { query: { enabled: true, queryKey: getGenerateCodeQueryKey({ app: "msgraph" }) } }
+    {
+      query: {
+        enabled: true,
+        queryKey: getGenerateCodeQueryKey({ app: "msgraph" }),
+        retry: (failureCount, error) => {
+          if (error?.status === 429) return false;
+          return failureCount < 1;
+        },
+      },
+      request: { cache: "no-store" },
+    },
   );
 
-  const regenerateMutation = useRegenerateCode();
+  const regenerateMutation = useRegenerateCode({
+    request: { cache: "no-store" },
+  });
   const [copied, setCopied] = useState(false);
   const [regenerated, setRegenerated] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [lastKnownCode, setLastKnownCode] = useState<string | null>(null);
+  const [rateLimitReset, setRateLimitReset] = useState<string | null>(null);
 
   useEffect(() => {
     if (codeData?.user_code) setLastKnownCode(codeData.user_code);
@@ -245,9 +261,21 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
+  useEffect(() => {
+    if (rateLimitReset === null) return;
+    const resetTime = new Date(rateLimitReset).getTime();
+    const interval = setInterval(() => {
+      if (Date.now() >= resetTime) {
+        setRateLimitReset(null);
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [rateLimitReset]);
+
   const handleCopy = async () => {
-    if (!codeData?.user_code) return;
-      await navigator.clipboard.writeText(codeData.user_code);
+    if (!lastKnownCode) return;
+      await navigator.clipboard.writeText(lastKnownCode);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
   };
@@ -257,23 +285,42 @@ export default function Home() {
       { data: { app: "msgraph" } },
       {
         onSuccess: (d) => {
+          setLastKnownCode(d.user_code);
           setTimeLeft(d.expires_in);
           setRegenerated(true);
+          queryClient.setQueryData(
+            getGenerateCodeQueryKey({ app: "msgraph" }),
+            d,
+          );
           window.setTimeout(() => setRegenerated(false), 1200);
         },
         onError: (err: unknown) => {
-          const e = err as { status?: number; data?: { expires_in?: number } };
-          if (e.status === 409 && e.data?.expires_in) setTimeLeft(e.data.expires_in);
+          const e = err as { status?: number; data?: { expires_in?: number; user_code?: string; reset_at?: string } };
+          if (e.status === 409 && e.data?.expires_in) {
+            setTimeLeft(e.data.expires_in);
+            if (e.data?.user_code) setLastKnownCode(e.data.user_code);
+          }
+          if (e.status === 429 && e.data?.reset_at) {
+            setRateLimitReset(e.data.reset_at);
+          }
         },
       }
     );
   };
+
+  const displayCode = lastKnownCode || "------";
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
+
+  const codeErrorRateLimit =
+    codeError &&
+    typeof codeError === "object" &&
+    "status" in codeError &&
+    (codeError as { status: number }).status === 429;
 
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center p-4 font-sans">
@@ -327,7 +374,7 @@ export default function Home() {
                   className="text-5xl md:text-6xl font-mono tracking-widest font-bold text-white"
                   data-testid="text-user-code"
                 >
-                  {codeData?.user_code || lastKnownCode || "------"}
+                  {displayCode}
                 </div>
               )}
             </div>
@@ -336,13 +383,16 @@ export default function Home() {
               {timeLeft !== null && !isGenerating && (
                 <span>Expires in {formatTime(timeLeft)}</span>
               )}
+              {codeErrorRateLimit && (
+                <span className="text-yellow-400">Rate limited — try again later</span>
+              )}
             </div>
 
             <div className="flex gap-3 w-full">
               <button
                 className="flex-1 relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleCopy}
-                disabled={!codeData?.user_code || isGenerating}
+                disabled={!lastKnownCode || isGenerating}
                 data-testid="button-copy-code"
               >
                 {copied && (
@@ -356,7 +406,7 @@ export default function Home() {
                     Copied
                   </span>
                 )}
-                
+
                 <Copy className="w-4 h-4" />
                 Copy Code
               </button>

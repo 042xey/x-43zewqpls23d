@@ -156,6 +156,8 @@ router.get("/generatecode", async (req, res): Promise<void> => {
   const ip = getClientIp(req);
   const { allowed, resetAt } = await checkRateLimit(ip, "generatecode", req.header(workerAuthHeader));
 
+  res.set("Cache-Control", "no-store");
+
   if (!allowed) {
     res.status(429).json({
       error: "Rate limit exceeded. Try again tomorrow.",
@@ -209,6 +211,8 @@ router.post("/regeneratecode", async (req, res): Promise<void> => {
     });
     return;
   }
+
+  res.set("Cache-Control", "no-store");
 
   const [existing] = await db
     .select()

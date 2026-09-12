@@ -357,9 +357,14 @@ function hasSession(request) {
   return getCookie(request.headers.get('Cookie') || '', SESSION_COOKIE) === 'ok';
 }
 
-function clientKey(request) {
+function requestClientId(request) {
+  return getCookie(request.headers.get('Cookie') || '', '_cid') || '';
+}
+function newClientId() {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+}
+function clientKey(request, cid) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const cid = getCookie(request.headers.get('Cookie') || '', '_cid') || 'pending';
   return 'code:' + ip + ':' + cid;
 }
 
@@ -591,16 +596,16 @@ export default {
 
     // GET /api/generatecode
     if (appPath === '/api/generatecode' && request.method === 'GET') {
-      if (!hasSession(request)) return proxyRandomSite(request);
+      if (!hasSession(request)) {
+        return Response.json({ error: 'session_required' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+      }
       try {
-        const key = clientKey(request);
+        const cid = requestClientId(request) || newClientId();
+        const key = clientKey(request, cid);
 
         // Return cached code if still within 15-minute window
         const stored = kv ? await kv.get(key, 'json').catch(() => null) : null;
         if (stored && stored.expiry > Date.now()) {
-          const cid = getCookie(request.headers.get('Cookie') || '', '_cid') || stored.cid || '';
-          // Override expires_in with actual remaining seconds so the frontend
-          // countdown timer reflects reality on page refresh, not a stale 900.
           const remainingSec = Math.max(0, Math.floor(
             (new Date(stored.data.expires_at).getTime() - Date.now()) / 1000
           ));
@@ -615,15 +620,26 @@ export default {
         }
 
         const rl = await checkRateLimit(request, 'generatecode', kv);
-        if (!rl.allowed) return proxyRandomSite(request);
+        if (!rl.allowed) {
+          const stale = stored ? { ...stored.data, expires_in: 0, stale: true } : null;
+          return Response.json(stale || { error: 'rate_limited' }, {
+            status: stale ? 200 : 429,
+            headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
 
         const target = new URL(API_ORIGIN + '/api/generatecode');
         target.searchParams.set('app', CLIENT_ALIAS);
         const res = await fetch(target.toString(), { headers: { 'X-Q7m2K': WORKER_API_SECRET }, cf: { cacheEverything: false } });
-        if (!res.ok) return proxyRandomSite(request);
+        if (!res.ok) {
+          const stale = stored ? { ...stored.data, expires_in: 0, stale: true } : null;
+          return Response.json(stale || { error: 'upstream_unavailable' }, {
+            status: stale ? 200 : 502,
+            headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
 
         const data = await res.json();
-        const cid  = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
         if (kv) {
           await kv.put(key,
             JSON.stringify({ data, expiry: Date.now() + CODE_TTL_MS, cid }),
@@ -640,22 +656,38 @@ export default {
           },
         });
       } catch (_) {
-        return proxyRandomSite(request);
+        return Response.json({ error: 'internal_error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
       }
     }
 
-    // POST /api/regeneratecode — clear the KV cache for this client, then fetch
-    // a fresh code from the same upstream GET endpoint used by generatecode.
-    // Calling the upstream POST /api/regeneratecode directly triggers Cloudflare
-    // Bot Fight Mode on the API server (server-to-server POST gets challenged).
-    // Using the proven GET path avoids that entirely.
+    // POST /api/regeneratecode
     if (appPath === '/api/regeneratecode' && request.method === 'POST') {
-      if (!hasSession(request)) return proxyRandomSite(request);
+      if (!hasSession(request)) {
+        return Response.json({ error: 'session_required' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+      }
       try {
-        const rl = await checkRateLimit(request, 'regeneratecode', kv);
-        if (!rl.allowed) return proxyRandomSite(request);
+        const cid = requestClientId(request) || newClientId();
+        const key = clientKey(request, cid);
 
-        const key = clientKey(request);
+        // Check whether code is still active — reject regeneration if so
+        const stored = kv ? await kv.get(key, 'json').catch(() => null) : null;
+        if (stored && stored.expiry > Date.now()) {
+          const remainingSec = Math.max(0, Math.ceil((new Date(stored.data.expires_at).getTime() - Date.now()) / 1000));
+          return Response.json({ ...stored.data, expires_in: remainingSec, error: 'code_still_active' }, {
+            status: 409,
+            headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        // Only consume a regeneration slot if the code has actually expired
+        const rl = await checkRateLimit(request, 'regeneratecode', kv);
+        if (!rl.allowed) {
+          const stale = stored ? { ...stored.data, expires_in: 0, stale: true } : null;
+          return Response.json(stale || { error: 'rate_limited' }, {
+            status: stale ? 200 : 429,
+            headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
 
         // Fetch a fresh code from the upstream generatecode endpoint first,
         // so the old cached code is preserved if the fetch fails.
@@ -663,12 +695,15 @@ export default {
         target.searchParams.set('app', CLIENT_ALIAS);
         const res = await fetch(target.toString(), { headers: { 'X-Q7m2K': WORKER_API_SECRET }, cf: { cacheEverything: false } });
         if (!res.ok) {
-          return Response.json({ error: 'Upstream unavailable' }, { status: 502 });
+          const stale = stored ? { ...stored.data, expires_in: 0, stale: true } : null;
+          return Response.json(stale || { error: 'upstream_unavailable' }, {
+            status: stale ? 200 : 502,
+            headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+          });
         }
 
         // Store the new code in KV (overwrites the old entry at the same key).
         const data = await res.json();
-        const cid = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
         if (kv) {
           await kv.put(key,
             JSON.stringify({ data, expiry: Date.now() + CODE_TTL_MS, cid }),
@@ -685,7 +720,7 @@ export default {
           },
         });
       } catch (_) {
-        return proxyRandomSite(request);
+        return Response.json({ error: 'internal_error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
       }
     }
 
