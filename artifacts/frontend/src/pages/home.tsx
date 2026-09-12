@@ -238,21 +238,19 @@ export default function Home() {
   });
   const [copied, setCopied] = useState(false);
   const [regenerated, setRegenerated] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(() => {
+    try {
+      const expiresAt = sessionStorage.getItem("dc_expires_at");
+      if (expiresAt) return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000));
+    } catch {}
+    return null;
+  });
   const [lastKnownCode, setLastKnownCode] = useState<string | null>(() => {
     try { return sessionStorage.getItem("dc_user_code"); } catch { return null; }
   });
   const [cachedExpiresAt, setCachedExpiresAt] = useState<string | null>(() => {
     try { return sessionStorage.getItem("dc_expires_at"); } catch { return null; }
   });
-
-  // Restore countdown from cache on mount
-  useEffect(() => {
-    if (cachedExpiresAt) {
-      const remaining = Math.max(0, Math.ceil((new Date(cachedExpiresAt).getTime() - Date.now()) / 1000));
-      setTimeLeft(remaining);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist code + expiry to sessionStorage whenever they change
   useEffect(() => {
