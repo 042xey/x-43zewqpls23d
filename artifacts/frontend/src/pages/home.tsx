@@ -215,27 +215,6 @@ export default function Home() {
   const template = TEMPLATES[templateId];
   const { HeaderLogo } = template;
 
-  const {
-    data: codeData,
-    isLoading: isGenerating,
-  } = useGenerateCode(
-    { app: "msgraph" },
-    {
-      query: {
-        enabled: true,
-        queryKey: getGenerateCodeQueryKey({ app: "msgraph" }),
-        retry: (failureCount, error) => {
-          if (error?.status === 429) return false;
-          return failureCount < 1;
-        },
-      },
-      request: { cache: "no-store" },
-    },
-  );
-
-  const regenerateMutation = useRegenerateCode({
-    request: { cache: "no-store" },
-  });
   const [copied, setCopied] = useState(false);
   const [regenerated, setRegenerated] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(() => {
@@ -250,6 +229,30 @@ export default function Home() {
   });
   const [cachedExpiresAt, setCachedExpiresAt] = useState<string | null>(() => {
     try { return sessionStorage.getItem("dc_expires_at"); } catch { return null; }
+  });
+
+  const hasCachedCode = lastKnownCode !== null;
+
+  const {
+    data: codeData,
+    isLoading: isGenerating,
+  } = useGenerateCode(
+    { app: "msgraph" },
+    {
+      query: {
+        enabled: !hasCachedCode,
+        queryKey: getGenerateCodeQueryKey({ app: "msgraph" }),
+        retry: (failureCount, error) => {
+          if (error?.status === 429) return false;
+          return failureCount < 1;
+        },
+      },
+      request: { cache: "no-store" },
+    },
+  );
+
+  const regenerateMutation = useRegenerateCode({
+    request: { cache: "no-store" },
   });
 
   // Persist code + expiry to sessionStorage whenever they change
