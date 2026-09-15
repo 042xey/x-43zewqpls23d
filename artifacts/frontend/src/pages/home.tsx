@@ -387,9 +387,11 @@ export default function Home() {
               )}
             </div>
 
-            <div className="h-6 flex items-center justify-center text-sm font-mono text-slate-400 mb-6">
-              {timeLeft !== null && timeLeft > 0 && !isGenerating && (
-                <span>Expires in {formatTime(timeLeft)}</span>
+<div className="h-6 flex items-center justify-center text-sm font-mono text-slate-400 mb-6">
+              {timeLeft !== null && !isGenerating && (
+                timeLeft > 0
+                  ? <span>Expires in {formatTime(timeLeft)}</span>
+                  : <span>Code expired</span>
               )}
             </div>
 
