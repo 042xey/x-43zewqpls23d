@@ -7,3 +7,5 @@ export * from "./adminUsers";
 export * from "./adminSessions";
 export * from "./auditEvents";
 export * from "./rateLimitBuckets";
+export * from "./keywordAlerts";
+export * from "./alertEvents";

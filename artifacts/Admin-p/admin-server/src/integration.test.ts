@@ -128,3 +128,143 @@ test("login, CSRF enforcement, and logout revocation work together", { skip: !en
   assert.equal(logout.status, 302);
   assert.equal((await request("/api/admin-test/ping")).status, 401);
 });
+
+test("keyword alerts CRUD and Telegram flow", { skip: !enabled }, async () => {
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  await db.execute(sql`delete from keyword_alerts`);
+  await db.execute(sql`delete from alert_events`);
+
+  const cfg = await request("/api/admin-test/keyword-alerts");
+  assert.equal(cfg.status, 200);
+  const empty = await cfg.json() as unknown[];
+  assert.equal(empty.length, 0);
+
+  const createBody = {
+    name: "Test Alert",
+    description: "A test",
+    severity: "high",
+    keywords: ["urgent", "payment"],
+    mode: "phrase",
+    channels: ["in-app"],
+    cooldown: 30,
+  };
+  const created = await request("/api/admin-test/keyword-alerts", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify(createBody),
+  });
+  assert.equal(created.status, 201);
+  const alert = await created.json() as Record<string, unknown>;
+  assert.equal(alert.name, "Test Alert");
+  assert.equal(alert.severity, "high");
+  assert.ok(alert.id);
+
+  const updated = await request(`/api/admin-test/keyword-alerts/${alert.id}`, {
+    method: "PATCH",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ name: "Updated Alert", enabled: false }),
+  });
+  assert.equal(updated.status, 200);
+  const patched = await updated.json() as Record<string, unknown>;
+  assert.equal(patched.name, "Updated Alert");
+  assert.equal(patched.enabled, false);
+
+  const dryRun = await request(`/api/admin-test/keyword-alerts/${alert.id}/test`, {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ sender: "treasury@example.com", recipient: "ops@example.com", subject: "Urgent payment hold", body: "Please wire transfer", attachment: "" }),
+  });
+  assert.equal(dryRun.status, 200);
+  const result = await dryRun.json() as Record<string, unknown>;
+  assert.equal(result.matched, true);
+
+  const dryRunNoMatch = await request(`/api/admin-test/keyword-alerts/${alert.id}/test`, {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ sender: "noreply@example.com", recipient: "ops@example.com", subject: "Weekly newsletter", body: "Your weekly update", attachment: "" }),
+  });
+  assert.equal(dryRunNoMatch.status, 200);
+  const noMatch = await dryRunNoMatch.json() as Record<string, unknown>;
+  assert.equal(noMatch.matched, false);
+
+  const eventsRes = await request("/api/admin-test/keyword-alert-events");
+  assert.equal(eventsRes.status, 200);
+  const events = await eventsRes.json() as unknown[];
+  assert.equal(events.length, 0);
+
+  const telegramGet = await request("/api/admin-test/telegram-connection");
+  assert.equal(telegramGet.status, 200);
+  const tgEmpty = await telegramGet.json() as Record<string, unknown>;
+  assert.equal(tgEmpty.connected, false);
+
+  const telegramSetup = await request("/api/admin-test/telegram-connection", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ botToken: "123456:ABCdefGHIjklmNOPqrstUVwxyzABCDEFGH", chatId: "-1001234567890" }),
+  });
+  assert.equal(telegramSetup.status, 200);
+  const tgConnected = await telegramSetup.json() as Record<string, unknown>;
+  assert.equal(tgConnected.connected, true);
+  assert.equal(tgConnected.chatId, "-1001234567890");
+  assert.equal(tgConnected.botName, "northstar-alerts");
+  assert.ok(tgConnected.configuredAt);
+
+  const telegramVerify = await request("/api/admin-test/telegram-connection");
+  assert.equal(telegramVerify.status, 200);
+  const tgVerify = await telegramVerify.json() as Record<string, unknown>;
+  assert.equal(tgVerify.connected, true);
+  assert.ok(!("botToken" in tgVerify));
+
+  const telegramReplace = await request("/api/admin-test/telegram-connection", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ botToken: "654321:ZYXwvuTSRqponMLKJihgfeDCBAzyx9876", chatId: "-1009876543210" }),
+  });
+  assert.equal(telegramReplace.status, 200);
+
+  const telegramDelete = await request("/api/admin-test/telegram-connection", {
+    method: "DELETE",
+    headers: { "x-csrf-token": csrf },
+  });
+  assert.equal(telegramDelete.status, 200);
+
+  const telegramGone = await request("/api/admin-test/telegram-connection");
+  assert.equal(telegramGone.status, 200);
+  const tgGone = await telegramGone.json() as Record<string, unknown>;
+  assert.equal(tgGone.connected, false);
+
+  const deleted = await request(`/api/admin-test/keyword-alerts/${alert.id}`, {
+    method: "DELETE",
+    headers: { "x-csrf-token": csrf },
+  });
+  assert.equal(deleted.status, 200);
+
+  const gone = await request("/api/admin-test/keyword-alerts");
+  assert.equal(gone.status, 200);
+  const remaining = await gone.json() as unknown[];
+  assert.equal(remaining.length, 0);
+});
+
+test("keyword alert validation rejects bad input", { skip: !enabled }, async () => {
+  const noName = await request("/api/admin-test/keyword-alerts", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ keywords: ["test"], channels: ["in-app"] }),
+  });
+  assert.equal(noName.status, 400);
+
+  const noKeywords = await request("/api/admin-test/keyword-alerts", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ name: "Test", channels: ["in-app"] }),
+  });
+  assert.equal(noKeywords.status, 400);
+
+  const noChannels = await request("/api/admin-test/keyword-alerts", {
+    method: "POST",
+    headers: { "x-csrf-token": csrf },
+    body: JSON.stringify({ name: "Test", keywords: ["test"] }),
+  });
+  assert.equal(noChannels.status, 400);
+});

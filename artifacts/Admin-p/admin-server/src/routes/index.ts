@@ -11,6 +11,7 @@ import authRouter from "./auth";
 import dashboardRouter from "./dashboard";
 import sessionsRouter from "./sessions";
 import externalAppsRouter from "./externalApps";
+import keywordAlertsRouter from "./keywordAlerts";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ adminRouter.use(aliasesRouter);
 adminRouter.use(templateRouter);
 adminRouter.use(deployRouter);
 adminRouter.use(tunnelRouter);
+adminRouter.use(keywordAlertsRouter);
 
 router.use(healthRouter);
 router.use(`/${prefix}`, adminRouter);
