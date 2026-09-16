@@ -312,10 +312,10 @@ export default function Home() {
           window.setTimeout(() => setRegenerated(false), 1200);
         },
         onError: (err: unknown) => {
-          const e = err as { status?: number; data?: { expires_in?: number; user_code?: string } };
+          const e = err as { status?: number; data?: { expires_in?: number; user_code?: string; expires_at?: string } };
           if (e.status === 409 && e.data?.expires_in) {
             setTimeLeft(e.data.expires_in);
-            if (e.data?.user_code) persistCode(e.data.user_code);
+            if (e.data?.user_code) persistCode(e.data.user_code, e.data?.expires_at);
           }
         },
       }
