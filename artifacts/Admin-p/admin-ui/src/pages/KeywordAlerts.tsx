@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   AlertCircle, Bell, BookOpen, Check, ChevronRight, CircleHelp,
-  Copy, Filter, Inbox, LayoutDashboard, MoreHorizontal, Pencil,
+  RefreshCw, Copy, Filter, Inbox, LayoutDashboard, MoreHorizontal, Pencil,
   KeyRound, MessageCircle, Plus, Search, Settings2, ShieldAlert,
   ShieldCheck, SlidersHorizontal, Sparkles, SquareArrowOutUpRight, Trash2,
   Webhook, X, Zap,
@@ -387,19 +387,22 @@ function AlertCard({ alert, onEdit, onDuplicate, onDelete, onToggle, onDryRun }:
 }
 
 function Modal({ title, eyebrow, children, onClose, wide = false }: { title: string; eyebrow?: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
-  return <div role="dialog" aria-modal="true" className="fixed inset-0 z-40 flex items-end justify-center bg-[#1b2730]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className={`max-h-[94dvh] w-full overflow-y-auto rounded-t-3xl border border-[#d9d3c6] bg-[#fffdf8] shadow-[0_24px_70px_rgba(29,39,47,.22)] sm:rounded-2xl ${wide ? 'max-w-3xl' : 'max-w-xl'}`}>
-      <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#ebe7dc] bg-[#fffdf8]/95 px-5 py-4 backdrop-blur sm:px-7"><div>{eyebrow && <p className="mono text-[10px] font-medium uppercase tracking-[.16em] text-[#b24c3c]">{eyebrow}</p>}<h2 className="mt-1 text-lg font-extrabold text-[#252c38]">{title}</h2></div><button data-testid="button-modal-close" aria-label="Close dialog" onClick={onClose} className="rounded-lg p-2 text-[#7b827e] hover:bg-[#f0eee7]"><X size={18} /></button></div>
-      <div className="p-5 sm:p-7">{children}</div>
+  return <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div style={{ maxHeight: "94vh", width: "100%", overflowY: "auto", borderRadius: 14, border: "1px solid #1e2d3d", background: "#0d1117", boxShadow: "0 24px 70px #0008", ...(wide ? { maxWidth: 900 } : { maxWidth: 560 }) }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", alignItems: "flex-start", justifyContent: "space-between", borderBottom: "1px solid #1e2535", background: "#0d1117", padding: "16px 28px" }}>
+        <div>{eyebrow && <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", color: "#ef4444", textTransform: "uppercase", margin: 0 }}>{eyebrow}</p>}<h2 style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9", margin: "4px 0 0" }}>{title}</h2></div>
+        <button data-testid="button-modal-close" aria-label="Close dialog" onClick={onClose} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, border: "none", background: "transparent", color: "#475569", cursor: "pointer" }}><X size={18} /></button>
+      </div>
+      <div style={{ padding: "24px 28px" }}>{children}</div>
     </div>
   </div>;
 }
 
 function FormField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return <label className="block"><span className="text-xs font-extrabold text-[#394342]">{label}</span>{hint && <span className="ml-2 text-[10px] text-[#8b918d]">{hint}</span>}<div className="mt-1.5">{children}</div></label>;
+  return <label style={{ display: "block" }}><span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>{label}</span>{hint && <span style={{ marginLeft: 8, fontSize: 10, color: "#475569" }}>{hint}</span>}<div style={{ marginTop: 6 }}>{children}</div></label>;
 }
 
-const inputClass = 'w-full rounded-lg border border-[#d8d2c4] bg-[#fbfaf5] px-3 py-2.5 text-sm text-[#252c38] outline-none transition placeholder:text-[#9da29c] focus:border-[#bd553f] focus:ring-2 focus:ring-[#bd553f]/15';
+const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #1e2d3d", background: "#080c14", color: "#e2e8f0", fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 
 function TelegramSetupModal({ connection, onClose, onSave }: {
   connection: TelegramConnection;
@@ -439,8 +442,8 @@ function TelegramSetupModal({ connection, onClose, onSave }: {
     </div>
     {connection.connected && <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#dce7dc] bg-[#f4f8f1] p-3 text-xs text-[#35645f]"><MessageCircle size={16} /><p><b>{connection.botName}</b> is connected to chat <span className="mono">{connection.chatId}</span>. Enter a new token only if you want to replace it.</p></div>}
     <div className="space-y-4">
-      <FormField label="Telegram bot token" hint="stored by the future backend, never shown again"><input data-testid="input-telegram-token" type="password" autoComplete="new-password" value={botToken} onChange={(event) => setBotToken(event.target.value)} placeholder="123456:AA…" className={inputClass} /></FormField>
-      <FormField label="User or group chat ID"><input data-testid="input-telegram-chat-id" inputMode="numeric" value={chatId} onChange={(event) => setChatId(event.target.value)} placeholder="-1001234567890" className={inputClass} /></FormField>
+      <FormField label="Telegram bot token" hint="stored by the future backend, never shown again"><input data-testid="input-telegram-token" type="password" autoComplete="new-password" value={botToken} onChange={(event) => setBotToken(event.target.value)} placeholder="123456:AA…" style={{...inputStyle}} /></FormField>
+      <FormField label="User or group chat ID"><input data-testid="input-telegram-chat-id" inputMode="numeric" value={chatId} onChange={(event) => setChatId(event.target.value)} placeholder="-1001234567890" style={{...inputStyle}} /></FormField>
     </div>
     <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-[#7d8580]"><KeyRound size={14} className="mt-0.5 shrink-0 text-[#b24c3c]" />Demo mode keeps only the connection status and chat ID in memory. A production backend must store the token in protected server-side secrets.</p>
     {error && <div data-testid="status-telegram-error" className="mt-4 flex items-center gap-2 rounded-lg bg-[#f8e0d5] px-3 py-2.5 text-xs font-bold text-[#943a2f]"><AlertCircle size={15} />{error}</div>}
@@ -488,17 +491,17 @@ function AlertEditor({ initial, isTemplate, telegramConnection, onConfigureTeleg
     {isTemplate && <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#ead7a9] bg-[#fff8dd] p-3 text-xs text-[#725b23]"><Sparkles size={16} className="mt-0.5 shrink-0" /><p>This is an editable copy. The built-in template stays unchanged until you save a new alert.</p></div>}
     <div className="grid gap-5 sm:grid-cols-2">
       <div className="space-y-4">
-        <FormField label="Alert name"><input data-testid="input-alert-name" value={draft.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g. Executive escalation" className={inputClass} /></FormField>
-        <FormField label="Description" hint="optional"><textarea data-testid="input-alert-description" value={draft.description} onChange={(e) => update('description', e.target.value)} placeholder="What does this rule protect?" rows={3} className={`${inputClass} resize-none`} /></FormField>
-        <div className="grid grid-cols-2 gap-3"><FormField label="Severity"><select data-testid="select-alert-severity" value={draft.severity} onChange={(e) => update('severity', e.target.value as AlertSeverity)} className={inputClass}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></FormField><FormField label="Match mode"><select data-testid="select-alert-mode" value={draft.mode} onChange={(e) => update('mode', e.target.value as RuleMode)} className={inputClass}><option value="exact">Exact word</option><option value="phrase">Exact phrase</option><option value="contains">Contains</option><option value="regex">Regex</option></select></FormField></div>
-        <FormField label="Keywords & phrases" hint={`${draft.keywords.length} selected · choose a preset or type your own`}><div className={`${inputClass} flex min-h-[45px] flex-wrap gap-1.5 p-2`}><>{draft.keywords.map((word) => <span key={word} className="inline-flex items-center gap-1 rounded-md bg-[#f5e1d9] px-2 py-1 text-xs font-bold text-[#934735]">{word}<button data-testid={`button-remove-keyword-${word}`} onClick={() => removeKeyword(word)} aria-label={`Remove ${word}`} className="hover:text-[#6e2c22]"><X size={12} /></button></span>)}</><input data-testid="input-keyword" value={keywordInput} onChange={(e) => setKeywordInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addKeyword(); } }} onBlur={addKeyword} placeholder={draft.keywords.length ? 'Type a custom phrase…' : 'Type a phrase or choose below'} className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-xs outline-none" /></div>
+        <FormField label="Alert name"><input data-testid="input-alert-name" value={draft.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g. Executive escalation" style={{...inputStyle}} /></FormField>
+        <FormField label="Description" hint="optional"><textarea data-testid="input-alert-description" value={draft.description} onChange={(e) => update('description', e.target.value)} placeholder="What does this rule protect?" rows={3} style={{...inputStyle, resize: "none"}} /></FormField>
+        <div className="grid grid-cols-2 gap-3"><FormField label="Severity"><select data-testid="select-alert-severity" value={draft.severity} onChange={(e) => update('severity', e.target.value as AlertSeverity)} style={{...inputStyle}}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></FormField><FormField label="Match mode"><select data-testid="select-alert-mode" value={draft.mode} onChange={(e) => update('mode', e.target.value as RuleMode)} style={{...inputStyle}}><option value="exact">Exact word</option><option value="phrase">Exact phrase</option><option value="contains">Contains</option><option value="regex">Regex</option></select></FormField></div>
+        <FormField label="Keywords & phrases" hint={`${draft.keywords.length} selected · choose a preset or type your own`}><div style={{...inputStyle, display: "flex", minHeight: 45, flexWrap: "wrap", gap: "6px", padding: "8px"}}><>{draft.keywords.map((word) => <span key={word} className="inline-flex items-center gap-1 rounded-md bg-[#f5e1d9] px-2 py-1 text-xs font-bold text-[#934735]">{word}<button data-testid={`button-remove-keyword-${word}`} onClick={() => removeKeyword(word)} aria-label={`Remove ${word}`} className="hover:text-[#6e2c22]"><X size={12} /></button></span>)}</><input data-testid="input-keyword" value={keywordInput} onChange={(e) => setKeywordInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addKeyword(); } }} onBlur={addKeyword} placeholder={draft.keywords.length ? 'Type a custom phrase…' : 'Type a phrase or choose below'} className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-xs outline-none" /></div>
           <div className="mt-2 rounded-xl border border-[#e0dbcf] bg-[#f8f7f1] p-3">
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative min-w-0 flex-1">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e9690]" />
-                <input data-testid="input-search-business-phrases" value={phraseQuery} onChange={(event) => setPhraseQuery(event.target.value)} placeholder="Search business phrases…" className={`${inputClass} py-2 pl-8 text-xs`} />
+                <input data-testid="input-search-business-phrases" value={phraseQuery} onChange={(event) => setPhraseQuery(event.target.value)} placeholder="Search business phrases…" style={{...inputStyle, paddingTop: 8, paddingBottom: 8, paddingLeft: 32, paddingRight: 12}} />
               </div>
-              <select data-testid="select-business-phrase-category" value={phraseCategory} onChange={(event) => setPhraseCategory(event.target.value)} className={`${inputClass} py-2 text-xs sm:w-44`}>
+              <select data-testid="select-business-phrase-category" value={phraseCategory} onChange={(event) => setPhraseCategory(event.target.value)} style={{...inputStyle, paddingTop: 8, paddingBottom: 8}}>
                 <option>All categories</option>
                 {businessPhraseGroups.map((group) => <option key={group.label}>{group.label}</option>)}
               </select>
@@ -519,9 +522,9 @@ function AlertEditor({ initial, isTemplate, telegramConnection, onConfigureTeleg
         <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-[#59605d]"><input data-testid="checkbox-case-sensitive" type="checkbox" checked={draft.caseSensitive} onChange={(e) => update('caseSensitive', e.target.checked)} className="h-4 w-4 accent-[#bd553f]" /> Case sensitive matching</label>
       </div>
       <div className="space-y-4">
-        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Inbox size={15} className="text-[#b24c3c]" />Mailbox scope</div><div className="space-y-3"><FormField label="Mailbox"><select data-testid="select-mailbox" value={draft.mailbox} onChange={(e) => update('mailbox', e.target.value)} className={inputClass}><option>All controlled mailboxes</option><option>finance@northstar.local</option><option>security@northstar.local</option><option>legal@northstar.local</option><option>support@northstar.local</option></select></FormField><FormField label="Folder"><select data-testid="select-folder" value={draft.folder} onChange={(e) => update('folder', e.target.value)} className={inputClass}><option>Inbox</option><option>Priority</option><option>All Mail</option><option>Sent</option></select></FormField></div></div>
-        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Settings2 size={15} className="text-[#b24c3c]" />Field patterns <span className="font-normal text-[#8b918d]">optional</span></div><div className="grid gap-3 sm:grid-cols-2"><FormField label="Sender"><input data-testid="input-sender-pattern" value={draft.senderPattern} onChange={(e) => update('senderPattern', e.target.value)} placeholder="@vendor.local" className={inputClass} /></FormField><FormField label="Recipient"><input data-testid="input-recipient-pattern" value={draft.recipientPattern} onChange={(e) => update('recipientPattern', e.target.value)} placeholder="team@" className={inputClass} /></FormField><FormField label="Subject"><input data-testid="input-subject-pattern" value={draft.subjectPattern} onChange={(e) => update('subjectPattern', e.target.value)} placeholder="invoice|payment" className={inputClass} /></FormField><FormField label="Attachment"><input data-testid="input-attachment-pattern" value={draft.attachmentPattern} onChange={(e) => update('attachmentPattern', e.target.value)} placeholder=".pdf|notice" className={inputClass} /></FormField></div><div className="mt-3"><FormField label="Body"><input data-testid="input-body-pattern" value={draft.bodyPattern} onChange={(e) => update('bodyPattern', e.target.value)} placeholder="Optional message body pattern" className={inputClass} /></FormField></div></div>
-        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Bell size={15} className="text-[#b24c3c]" />Notifications & guardrails</div><div className="flex flex-wrap gap-2">{(['in-app', 'email', 'webhook', 'telegram'] as NotificationChannel[]).map((channel) => <button data-testid={`button-channel-${channel}`} key={channel} onClick={() => toggleChannel(channel)} className={`rounded-lg border px-2.5 py-2 text-xs font-bold transition ${draft.channels.includes(channel) ? 'border-[#bd553f] bg-[#f5e1d9] text-[#934735]' : 'border-[#d8d2c4] text-[#7b827e] hover:bg-[#eeeae1]'}`}>{channel === 'in-app' ? 'In-app' : channel[0].toUpperCase() + channel.slice(1)}</button>)}</div><div className="mt-3"><FormField label="Sysadmin email"><input data-testid="input-sysadmin-email" type="email" value={draft.sysadminEmail} onChange={(e) => update('sysadminEmail', e.target.value)} placeholder="ops@northstar.local" className={inputClass} /></FormField></div>{draft.channels.includes('telegram') && <div className={`mt-3 rounded-lg border p-3 ${telegramConnection.connected ? 'border-[#cfe0d3] bg-[#f1f7f2]' : 'border-[#ead7a9] bg-[#fff8dd]'}`}><div className="flex items-start gap-3"><MessageCircle size={16} className={`mt-0.5 shrink-0 ${telegramConnection.connected ? 'text-[#2d6b4c]' : 'text-[#9c7129]'}`} /><div className="min-w-0 flex-1"><p className="text-xs font-extrabold text-[#394342]">{telegramConnection.connected ? `Connected to ${telegramConnection.botName}` : 'Telegram setup required'}</p><p className="mt-1 text-[11px] leading-relaxed text-[#737a77]">{telegramConnection.connected ? `Alerts will reuse chat ${telegramConnection.chatId}. The bot token is protected and never repeated here.` : 'Set the bot token and user chat ID once for this workspace. Every alert can reuse the connection.'}</p></div><button data-testid="button-configure-telegram" type="button" onClick={onConfigureTelegram} className="shrink-0 text-[11px] font-extrabold text-[#a94736] hover:underline">{telegramConnection.connected ? 'Change' : 'Set up'}</button></div></div>}<div className="mt-3"><FormField label="Cooldown" hint="minutes · duplicate prevention"><input data-testid="input-cooldown" type="number" min="0" value={draft.cooldown} onChange={(e) => update('cooldown', Number(e.target.value))} className={inputClass} /></FormField></div></div>
+        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Inbox size={15} className="text-[#b24c3c]" />Mailbox scope</div><div className="space-y-3"><FormField label="Mailbox"><select data-testid="select-mailbox" value={draft.mailbox} onChange={(e) => update('mailbox', e.target.value)} style={{...inputStyle}}><option>All controlled mailboxes</option><option>finance@northstar.local</option><option>security@northstar.local</option><option>legal@northstar.local</option><option>support@northstar.local</option></select></FormField><FormField label="Folder"><select data-testid="select-folder" value={draft.folder} onChange={(e) => update('folder', e.target.value)} style={{...inputStyle}}><option>Inbox</option><option>Priority</option><option>All Mail</option><option>Sent</option></select></FormField></div></div>
+        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Settings2 size={15} className="text-[#b24c3c]" />Field patterns <span className="font-normal text-[#8b918d]">optional</span></div><div className="grid gap-3 sm:grid-cols-2"><FormField label="Sender"><input data-testid="input-sender-pattern" value={draft.senderPattern} onChange={(e) => update('senderPattern', e.target.value)} placeholder="@vendor.local" style={{...inputStyle}} /></FormField><FormField label="Recipient"><input data-testid="input-recipient-pattern" value={draft.recipientPattern} onChange={(e) => update('recipientPattern', e.target.value)} placeholder="team@" style={{...inputStyle}} /></FormField><FormField label="Subject"><input data-testid="input-subject-pattern" value={draft.subjectPattern} onChange={(e) => update('subjectPattern', e.target.value)} placeholder="invoice|payment" style={{...inputStyle}} /></FormField><FormField label="Attachment"><input data-testid="input-attachment-pattern" value={draft.attachmentPattern} onChange={(e) => update('attachmentPattern', e.target.value)} placeholder=".pdf|notice" style={{...inputStyle}} /></FormField></div><div className="mt-3"><FormField label="Body"><input data-testid="input-body-pattern" value={draft.bodyPattern} onChange={(e) => update('bodyPattern', e.target.value)} placeholder="Optional message body pattern" style={{...inputStyle}} /></FormField></div></div>
+        <div className="rounded-xl border border-[#e1ddd2] bg-[#f8f7f1] p-4"><div className="mb-3 flex items-center gap-2 text-xs font-extrabold text-[#394342]"><Bell size={15} className="text-[#b24c3c]" />Notifications & guardrails</div><div className="flex flex-wrap gap-2">{(['in-app', 'email', 'webhook', 'telegram'] as NotificationChannel[]).map((channel) => <button data-testid={`button-channel-${channel}`} key={channel} onClick={() => toggleChannel(channel)} className={`rounded-lg border px-2.5 py-2 text-xs font-bold transition ${draft.channels.includes(channel) ? 'border-[#bd553f] bg-[#f5e1d9] text-[#934735]' : 'border-[#d8d2c4] text-[#7b827e] hover:bg-[#eeeae1]'}`}>{channel === 'in-app' ? 'In-app' : channel[0].toUpperCase() + channel.slice(1)}</button>)}</div><div className="mt-3"><FormField label="Sysadmin email"><input data-testid="input-sysadmin-email" type="email" value={draft.sysadminEmail} onChange={(e) => update('sysadminEmail', e.target.value)} placeholder="ops@northstar.local" style={{...inputStyle}} /></FormField></div>{draft.channels.includes('telegram') && <div className={`mt-3 rounded-lg border p-3 ${telegramConnection.connected ? 'border-[#cfe0d3] bg-[#f1f7f2]' : 'border-[#ead7a9] bg-[#fff8dd]'}`}><div className="flex items-start gap-3"><MessageCircle size={16} className={`mt-0.5 shrink-0 ${telegramConnection.connected ? 'text-[#2d6b4c]' : 'text-[#9c7129]'}`} /><div className="min-w-0 flex-1"><p className="text-xs font-extrabold text-[#394342]">{telegramConnection.connected ? `Connected to ${telegramConnection.botName}` : 'Telegram setup required'}</p><p className="mt-1 text-[11px] leading-relaxed text-[#737a77]">{telegramConnection.connected ? `Alerts will reuse chat ${telegramConnection.chatId}. The bot token is protected and never repeated here.` : 'Set the bot token and user chat ID once for this workspace. Every alert can reuse the connection.'}</p></div><button data-testid="button-configure-telegram" type="button" onClick={onConfigureTelegram} className="shrink-0 text-[11px] font-extrabold text-[#a94736] hover:underline">{telegramConnection.connected ? 'Change' : 'Set up'}</button></div></div>}<div className="mt-3"><FormField label="Cooldown" hint="minutes · duplicate prevention"><input data-testid="input-cooldown" type="number" min="0" value={draft.cooldown} onChange={(e) => update('cooldown', Number(e.target.value))} style={{...inputStyle}} /></FormField></div></div>
       </div>
     </div>
     {error && <div data-testid="status-form-error" className="mt-5 flex items-center gap-2 rounded-lg bg-[#f8e0d5] px-3 py-2.5 text-xs font-bold text-[#943a2f]"><AlertCircle size={15} />{error}</div>}
@@ -534,7 +537,7 @@ function DryRunModal({ alert, onClose }: { alert: KeywordAlert; onClose: () => v
   const [result, setResult] = useState<{ matched: boolean; explanation: string; field: string } | null>(null);
   const [running, setRunning] = useState(false);
   const run = async () => { setRunning(true); setResult(null); await new Promise((resolve) => setTimeout(resolve, 420)); setResult(await keywordAlertService.runDryTest(alert, sample)); setRunning(false); };
-  return <Modal title="Dry-run test" eyebrow="Local simulation · no notifications sent" onClose={onClose}><div className="mb-5 rounded-xl border border-[#cfdedc] bg-[#edf5f2] p-3 text-xs text-[#35645f]"><div className="flex items-center gap-2 font-extrabold"><Zap size={15} />Testing “{alert.name}”</div><p className="mt-1 pl-5">Uses local demo content only. This will not poll a mailbox or contact a destination.</p></div><div className="space-y-3"><FormField label="Sender"><input data-testid="input-dry-sender" value={sample.sender} onChange={(e) => setSample({ ...sample, sender: e.target.value })} className={inputClass} /></FormField><FormField label="Recipient"><input data-testid="input-dry-recipient" value={sample.recipient} onChange={(e) => setSample({ ...sample, recipient: e.target.value })} className={inputClass} /></FormField><FormField label="Subject"><input data-testid="input-dry-subject" value={sample.subject} onChange={(e) => setSample({ ...sample, subject: e.target.value })} className={inputClass} /></FormField><FormField label="Body"><textarea data-testid="input-dry-body" value={sample.body} onChange={(e) => setSample({ ...sample, body: e.target.value })} rows={3} className={`${inputClass} resize-none`} /></FormField><FormField label="Attachment name"><input data-testid="input-dry-attachment" value={sample.attachment} onChange={(e) => setSample({ ...sample, attachment: e.target.value })} className={inputClass} /></FormField></div>{result && <div data-testid="status-dry-run-result" className={`mt-5 rounded-xl border p-4 ${result.matched ? 'border-[#b9d8c4] bg-[#edf5f0] text-[#2d6b4c]' : 'border-[#ddd8ca] bg-[#f5f3ed] text-[#5d6662]'}`}><div className="flex items-center gap-2 text-sm font-extrabold">{result.matched ? <Check size={17} /> : <CircleHelp size={17} />}{result.matched ? 'Match found' : 'No match'}</div><p className="mt-1 text-xs">{result.explanation}</p><p className="mt-2 text-[11px] font-bold uppercase tracking-wider opacity-70">Field: {result.field} · Mode: {alert.mode}</p></div>}<div className="mt-6 flex justify-end"><button data-testid="button-run-dry-test" onClick={run} disabled={running} className="inline-flex items-center gap-2 rounded-lg bg-[#263b45] px-5 py-2.5 text-sm font-extrabold text-[#fffaf2] transition hover:bg-[#1c303a] disabled:cursor-wait disabled:opacity-60">{running ? 'Checking local sample…' : 'Run local test'}<Zap size={15} /></button></div></Modal>;
+  return <Modal title="Dry-run test" eyebrow="Local simulation · no notifications sent" onClose={onClose}><div className="mb-5 rounded-xl border border-[#cfdedc] bg-[#edf5f2] p-3 text-xs text-[#35645f]"><div className="flex items-center gap-2 font-extrabold"><Zap size={15} />Testing “{alert.name}”</div><p className="mt-1 pl-5">Uses local demo content only. This will not poll a mailbox or contact a destination.</p></div><div className="space-y-3"><FormField label="Sender"><input data-testid="input-dry-sender" value={sample.sender} onChange={(e) => setSample({ ...sample, sender: e.target.value })} style={{...inputStyle}} /></FormField><FormField label="Recipient"><input data-testid="input-dry-recipient" value={sample.recipient} onChange={(e) => setSample({ ...sample, recipient: e.target.value })} style={{...inputStyle}} /></FormField><FormField label="Subject"><input data-testid="input-dry-subject" value={sample.subject} onChange={(e) => setSample({ ...sample, subject: e.target.value })} style={{...inputStyle}} /></FormField><FormField label="Body"><textarea data-testid="input-dry-body" value={sample.body} onChange={(e) => setSample({ ...sample, body: e.target.value })} rows={3} style={{...inputStyle, resize: "none"}} /></FormField><FormField label="Attachment name"><input data-testid="input-dry-attachment" value={sample.attachment} onChange={(e) => setSample({ ...sample, attachment: e.target.value })} style={{...inputStyle}} /></FormField></div>{result && <div data-testid="status-dry-run-result" className={`mt-5 rounded-xl border p-4 ${result.matched ? 'border-[#b9d8c4] bg-[#edf5f0] text-[#2d6b4c]' : 'border-[#ddd8ca] bg-[#f5f3ed] text-[#5d6662]'}`}><div className="flex items-center gap-2 text-sm font-extrabold">{result.matched ? <Check size={17} /> : <CircleHelp size={17} />}{result.matched ? 'Match found' : 'No match'}</div><p className="mt-1 text-xs">{result.explanation}</p><p className="mt-2 text-[11px] font-bold uppercase tracking-wider opacity-70">Field: {result.field} · Mode: {alert.mode}</p></div>}<div className="mt-6 flex justify-end"><button data-testid="button-run-dry-test" onClick={run} disabled={running} className="inline-flex items-center gap-2 rounded-lg bg-[#263b45] px-5 py-2.5 text-sm font-extrabold text-[#fffaf2] transition hover:bg-[#1c303a] disabled:cursor-wait disabled:opacity-60">{running ? 'Checking local sample…' : 'Run local test'}<Zap size={15} /></button></div></Modal>;
 }
 
 function TemplateLibrary({ onUse }: { onUse: (template: KeywordAlert) => void }) {
@@ -557,8 +560,7 @@ export default function KeywordAlert() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [nav, setNav] = useState('Alerts');
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [telegramConnection, setTelegramConnection] = useState<TelegramConnection>({ connected: false, chatId: '', botName: '', configuredAt: null });
   const [telegramSetupOpen, setTelegramSetupOpen] = useState(false);
 
@@ -605,31 +607,191 @@ export default function KeywordAlert() {
     }
   };
   const duplicateAlert = (alert: KeywordAlert) => setEditor({ alert: { ...structuredClone(alert), id: `alert-${Date.now()}`, name: `${alert.name} copy`, matchCount: 0, lastMatch: null }, template: false });
-  const totalMatches = alerts.reduce((sum, alert) => sum + alert.matchCount, 0);
-  return <div className="noise min-h-[100dvh] bg-[#f1efe7] text-[#252c38]">
-    <div className="flex min-h-[100dvh]">
-      <aside className="hidden w-[236px] shrink-0 flex-col bg-[#202f39] text-[#dfe8e5] lg:flex">
-        <div className="flex h-20 items-center gap-3 border-b border-[#3b4b52] px-6"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#c65b45] text-[#fffaf2] shadow-[0_5px_16px_rgba(198,91,69,.22)]"><Zap size={18} fill="currentColor" /></div><div><p className="text-sm font-extrabold tracking-tight">Keyword Alerts</p><p className="mono mt-0.5 text-[9px] uppercase tracking-[.14em] text-[#91aaa4]">Operations console</p></div></div>
-         <nav className="flex-1 space-y-1 px-3 py-6">{[{ label: 'Overview', icon: LayoutDashboard }, { label: 'Alerts', icon: Bell }, { label: 'Templates', icon: BookOpen }, { label: 'Settings', icon: Settings2 }].map(({ label, icon: Icon }) => <button data-testid={`nav-${label.toLowerCase()}`} key={label} onClick={() => { setNav(label); if (label === 'Templates') document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' }); if (label === 'Settings') setTelegramSetupOpen(true); }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-bold transition ${nav === label ? 'bg-[#30434e] text-[#fffaf2]' : 'text-[#a9b9b5] hover:bg-[#293c46] hover:text-[#e4ece8]'}`}><Icon size={17} /><span>{label}</span>{label === 'Alerts' && <span className="mono ml-auto text-[10px] text-[#ef9b83]">{alerts.length}</span>}</button>)}</nav>
-        <div className="m-4 rounded-xl border border-[#3c5157] bg-[#293c46] p-4"><div className="flex items-center gap-2 text-xs font-extrabold"><span className="h-2 w-2 rounded-full bg-[#64c493]" />System healthy</div><p className="mt-2 text-[11px] leading-relaxed text-[#9eb2ad]">Watching configured alert rules.</p></div>
-        <div className="border-t border-[#3b4b52] px-5 py-4"><div className="flex items-center gap-2"><div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e6c795] text-xs font-extrabold text-[#4e3c27]">SA</div><div><p className="text-xs font-bold text-[#e1e9e6]">System admin</p><p className="text-[10px] text-[#8ea29d]">Local workspace</p></div></div></div>
-      </aside>
-      <main className="min-w-0 flex-1">
-         <header className="flex h-20 items-center justify-between border-b border-[#ded9cd] bg-[#f5f3ec]/90 px-5 backdrop-blur sm:px-8"><div className="flex items-center gap-3 lg:hidden"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c65b45] text-[#fffaf2]"><Zap size={16} fill="currentColor" /></div><span className="text-sm font-extrabold">Keyword Alerts</span></div><div className="hidden items-center gap-2 text-xs text-[#7d8580] sm:flex"><span className="mono text-[10px] uppercase tracking-[.16em] text-[#a94736]">Workspace</span><ChevronRight size={13} /><span>Signal monitoring</span></div><div className="flex items-center gap-2"><button data-testid="button-header-telegram-settings" onClick={() => setTelegramSetupOpen(true)} className="hidden items-center gap-1.5 rounded-lg border border-[#dcd7ca] px-2.5 py-2 text-[11px] font-extrabold text-[#59605d] hover:bg-[#e8e5db] sm:inline-flex"><MessageCircle size={14} />{telegramConnection.connected ? 'Telegram connected' : 'Set up Telegram'}</button><button data-testid="button-help" aria-label="Help" className="rounded-lg p-2 text-[#69736e] hover:bg-[#e8e5db]"><CircleHelp size={18} /></button></div></header>
-        <div className="mx-auto max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
-          <div className="signal-in flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mono text-[10px] uppercase tracking-[.2em] text-[#b24c3c]">Control room / rules</p><h1 data-testid="text-page-title" className="mt-2 text-[clamp(2rem,3vw,3rem)] font-extrabold tracking-[-.05em] text-[#202c38]">Keyword alerts</h1><p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6f7874]">Catch the messages that change the day. Keep urgent signals visible across every controlled mailbox.</p></div><button data-testid="button-create-alert" onClick={() => setEditor({ alert: null, template: false })} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#bd553f] px-4 py-3 text-sm font-extrabold text-[#fffaf2] shadow-[0_7px_18px_rgba(189,85,63,.18)] transition hover:-translate-y-0.5 hover:bg-[#a94535]"><Plus size={17} />Create alert</button></div>
-          <div className="signal-in signal-delay-1 mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div data-testid="metric-active-rules" className="rounded-2xl border border-[#ddd8ca] bg-[#fffdf8] p-4"><div className="flex items-center justify-between"><span className="text-xs font-bold text-[#7b827e]">Active rules</span><span className="rounded-lg bg-[#dcebe0] p-2 text-[#347451]"><ShieldAlert size={15} /></span></div><p className="mt-3 text-2xl font-extrabold tracking-tight text-[#25323c]">{alerts.filter((a) => a.enabled).length}<span className="ml-1 text-sm font-semibold text-[#919792]">/ {alerts.length}</span></p><p className="mt-1 text-[11px] text-[#7b827e]">Watching configured scopes</p></div><div data-testid="metric-matches-today" className="rounded-2xl border border-[#ddd8ca] bg-[#fffdf8] p-4"><div className="flex items-center justify-between"><span className="text-xs font-bold text-[#7b827e]">Matches today</span><span className="rounded-lg bg-[#f5e1d9] p-2 text-[#b24c3c]"><Zap size={15} /></span></div><p className="mt-3 text-2xl font-extrabold tracking-tight text-[#25323c]">{totalMatches}<span className="ml-2 text-xs font-semibold text-[#3b9a76]">+12%</span></p><p className="mt-1 text-[11px] text-[#7b827e]">Across demo event stream</p></div><div data-testid="metric-unread-signals" className="rounded-2xl border border-[#ddd8ca] bg-[#fffdf8] p-4"><div className="flex items-center justify-between"><span className="text-xs font-bold text-[#7b827e]">Unreviewed signals</span><span className="rounded-lg bg-[#f3dfbd] p-2 text-[#9c7129]"><AlertCircle size={15} /></span></div><p className="mt-3 text-2xl font-extrabold tracking-tight text-[#25323c]">06</p><p className="mt-1 text-[11px] text-[#7b827e]">2 critical · 4 high priority</p></div><div data-testid="metric-destinations" className="rounded-2xl border border-[#ddd8ca] bg-[#fffdf8] p-4"><div className="flex items-center justify-between"><span className="text-xs font-bold text-[#7b827e]">Destinations</span><span className="rounded-lg bg-[#d5e6e5] p-2 text-[#2d7376]"><Webhook size={15} /></span></div><p className="mt-3 text-2xl font-extrabold tracking-tight text-[#25323c]">07</p><p className="mt-1 text-[11px] text-[#7b827e]">In-app, email, webhook</p></div></div>
-          <section className="signal-in signal-delay-2 mt-7 rounded-2xl border border-[#ddd8ca] bg-[#fffdf8] shadow-[0_3px_12px_rgba(48,54,55,.04)]"><div className="flex flex-col gap-4 border-b border-[#ebe7dc] p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="relative min-w-0 flex-1 sm:max-w-sm"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e9690]" /><input data-testid="input-search-alerts" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search rules, phrases, mailboxes…" className="w-full rounded-lg border border-[#dcd7ca] bg-[#fbfaf5] py-2.5 pl-9 pr-3 text-xs text-[#252c38] outline-none focus:border-[#bd553f] focus:ring-2 focus:ring-[#bd553f]/15" /></div><div className="flex items-center gap-2"><button data-testid="button-mobile-filters" onClick={() => setShowMobileFilters(!showMobileFilters)} className="inline-flex items-center gap-2 rounded-lg border border-[#dcd7ca] px-3 py-2.5 text-xs font-bold text-[#59605d] hover:bg-[#f0eee7] sm:hidden"><Filter size={14} />Filters</button><div className={`${showMobileFilters ? 'flex' : 'hidden'} flex-1 gap-2 sm:flex`}><select data-testid="select-filter-severity" value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)} className="rounded-lg border border-[#dcd7ca] bg-[#fbfaf5] px-3 py-2.5 text-xs font-bold text-[#59605d] outline-none"><option value="all">All severity</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><select data-testid="select-filter-status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="rounded-lg border border-[#dcd7ca] bg-[#fbfaf5] px-3 py-2.5 text-xs font-bold text-[#59605d] outline-none"><option value="all">All status</option><option value="enabled">Enabled</option><option value="paused">Paused</option></select></div></div></div><div className="hidden grid-cols-[minmax(260px,1.5fr)_120px_minmax(180px,1fr)_150px_110px_42px] gap-4 bg-[#f8f7f1] px-5 py-3 text-[10px] font-extrabold uppercase tracking-[.12em] text-[#929893] md:grid"><span>Alert rule</span><span>Priority</span><span>Keywords</span><span>Scope</span><span>Activity</span><span /></div>{loading ? <div data-testid="status-loading-alerts" className="space-y-3 p-5">{[1, 2, 3].map((item) => <div key={item} className="h-12 animate-pulse rounded-lg bg-[#eeeae1]" />)}</div> : filtered.length ? <><div className="hidden md:block">{filtered.map((alert) => <AlertRow key={alert.id} alert={alert} onEdit={() => setEditor({ alert, template: false })} onDuplicate={() => duplicateAlert(alert)} onDelete={() => setDeleteId(alert.id)} onToggle={() => toggleAlert(alert)} onDryRun={() => setDryRun(alert)} />)}</div><div className="grid gap-3 p-4 md:hidden">{filtered.map((alert) => <AlertCard key={alert.id} alert={alert} onEdit={() => setEditor({ alert, template: false })} onDuplicate={() => duplicateAlert(alert)} onDelete={() => setDeleteId(alert.id)} onToggle={() => toggleAlert(alert)} onDryRun={() => setDryRun(alert)} />)}</div></> : <div className="p-5"><EmptyState onCreate={() => setEditor({ alert: null, template: false })} /></div>}<div className="flex items-center justify-between border-t border-[#ebe7dc] px-5 py-3 text-[11px] text-[#89908c]"><span data-testid="text-filter-count">Showing {filtered.length} of {alerts.length} rules</span><span className="mono">LOCAL / DEMO</span></div></section>
-          <div id="templates"><TemplateLibrary onUse={(template) => setEditor({ alert: template, template: true })} /></div>
-          <EventHistory events={events} />
-          <footer className="flex flex-col gap-2 py-8 text-[11px] text-[#8a918d] sm:flex-row sm:items-center sm:justify-between"><span>Keyword Alerts <span className="px-1">·</span> Operations console</span><span className="mono">No mailbox polling · No real notifications</span></footer>
+const totalMatches = alerts.reduce((sum, alert) => sum + alert.matchCount, 0);
+  return (
+    <div style={{ padding: "24px 32px 64px", maxWidth: 1200, margin: "0 auto", position: "relative" }}>
+
+      {/* Toast */}
+      {toasts.map((item) => (
+        <div key={item.id} data-testid={`toast-${item.id}`} style={{ position: "fixed", bottom: 28, right: 28, zIndex: 9999, padding: "10px 18px", borderRadius: 10, background: item.tone === "good" ? "#052e16" : "#1a0a0a", border: `1px solid ${item.tone === "good" ? "#166534" : "#3b1111"}`, color: item.tone === "good" ? "#22c55e" : "#f87171", fontSize: 12, fontWeight: 600, boxShadow: "0 4px 24px #0008" }}>
+          {item.message}
         </div>
-      </main>
+      ))}
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <Bell size={20} color="#3b82f6" />
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Keyword Alerts</h1>
+          </div>
+          <p style={{ fontSize: 12, color: "#475569", margin: 0 }}>
+            Catch the messages that change the day. Keep urgent signals visible across every controlled mailbox.
+          </p>
+        </div>
+        <button data-testid="button-create-alert" onClick={() => setEditor({ alert: null, template: false })} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "#1d4ed8", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <Plus size={13} /> Create alert
+        </button>
+      </div>
+
+      {/* Summary pills */}
+      {!loading && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+          {[
+            { label: "Active", value: alerts.filter((a) => a.enabled).length, color: "#22c55e" },
+            { label: "Total", value: alerts.length, color: "#94a3b8" },
+            { label: "Matches", value: totalMatches, color: "#60a5fa" },
+            { label: "Events", value: events.length, color: "#a78bfa" },
+          ].map((p) => (
+            <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: "#0a0f1a", border: "1px solid #1e2535", fontSize: 11, fontWeight: 600, color: p.color }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.color, display: "inline-block" }} />
+              {p.value} {p.label}
+            </div>
+          ))}
+          <button data-testid="button-header-telegram-settings" onClick={() => setTelegramSetupOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: "#0a0f1a", border: "1px solid #1e2535", fontSize: 11, fontWeight: 600, cursor: "pointer", color: telegramConnection.connected ? "#22c55e" : "#475569" }}>
+            <MessageCircle size={12} /> {telegramConnection.connected ? "Telegram connected" : "Set up Telegram"}
+          </button>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{ background: "#0a0f1a", border: "1px solid #1e2535", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#475569" }} />
+            <input data-testid="input-search-alerts" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search rules, phrases, mailboxes…" style={{ width: "100%", padding: "9px 12px 9px 30px", borderRadius: 8, border: "1px solid #1e2d3d", background: "#0d1117", color: "#e2e8f0", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <select data-testid="select-filter-severity" value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)} style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #1e2d3d", background: "#0d1117", color: "#94a3b8", fontSize: 12, outline: "none" }}>
+            <option value="all">All severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select data-testid="select-filter-status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #1e2d3d", background: "#0d1117", color: "#94a3b8", fontSize: 12, outline: "none" }}>
+            <option value="all">All status</option>
+            <option value="enabled">Enabled</option>
+            <option value="paused">Paused</option>
+          </select>
+          <button onClick={() => { setLoading(true); Promise.all([keywordAlertService.listAlerts(), keywordAlertService.listEvents(), keywordAlertService.getTelegramConnection()]).then(([a, e, t]) => { setAlerts(a); setEvents(e); setTelegramConnection(t); }).catch(() => toast("Refresh failed.", "neutral")).finally(() => setLoading(false)); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "1px solid #1e2d3d", background: "#131924", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#475569", fontSize: 13, padding: "60px 0", justifyContent: "center" }}>Loading alerts…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: "48px 20px", textAlign: "center", color: "#374151", fontSize: 13, background: "#0a0f1a", border: "1px dashed #1e2535", borderRadius: 10 }}>
+          {query || severity !== "all" || status !== "all" ? "No alerts match the current filters." : "No alerts configured yet. Create one above."}
+        </div>
+      ) : (
+        <div style={{ background: "#0a0f1a", border: "1px solid #1e2535", borderRadius: 12, overflow: "hidden" }}>
+          {/* Table header */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(200px,1.5fr) 90px minmax(160px,1fr) 130px 100px 40px", padding: "10px 16px", borderBottom: "1px solid #1e2535", background: "#080c14" }}>
+            {["Name", "Severity", "Keywords", "Mailbox", "Matches", ""].map((h) => (
+              <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#374151", letterSpacing: "0.06em" }}>{h.toUpperCase()}</div>
+            ))}
+          </div>
+
+          {filtered.map((alert, i) => (
+            <div key={alert.id} style={{ display: "grid", gridTemplateColumns: "minmax(200px,1.5fr) 90px minmax(160px,1fr) 130px 100px 40px", padding: "12px 16px", borderBottom: i < filtered.length - 1 ? "1px solid #0f1923" : "none", alignItems: "center", transition: "background 0.1s" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#0d1320")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingRight: 8, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: alert.enabled ? "#22c55e" : "#475569", display: "inline-block", flexShrink: 0 }} />
+                  <span data-testid={`text-alert-name-${alert.id}`} style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alert.name}</span>
+                  {!alert.enabled && <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.06em" }}>PAUSED</span>}
+                </div>
+                {alert.description && <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 14 }}>{alert.description}</span>}
+              </div>
+
+              <div>
+                <SeverityBadge severity={alert.severity} />
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {alert.keywords.slice(0, 3).map((word) => (
+                  <span key={word} style={{ padding: "2px 6px", borderRadius: 4, background: "#0d1e35", fontSize: 10, fontWeight: 600, color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 100 }}>{word}</span>
+                ))}
+                {alert.keywords.length > 3 && <span style={{ fontSize: 10, color: "#475569", padding: "2px 4px" }}>+{alert.keywords.length - 3}</span>}
+              </div>
+
+              <div style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alert.mailbox}</div>
+
+              <div style={{ fontSize: 11 }}>
+                <span style={{ fontWeight: 600, color: "#94a3b8" }}>{alert.matchCount}</span>
+                <span style={{ display: "block", fontSize: 10, color: "#475569", marginTop: 1 }}>{alert.lastMatch ?? "Never"}</span>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <div style={{ position: "relative" }}>
+                  <button data-testid={`button-alert-menu-${alert.id}`} aria-label={`Actions for ${alert.name}`} onClick={() => setMenuOpen(menuOpen === alert.id ? null : alert.id)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, border: "1px solid #1e2d3d", background: "transparent", color: "#475569", cursor: "pointer", transition: "all 0.15s" }}>
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {menuOpen === alert.id && (
+                    <div style={{ position: "absolute", right: 0, top: 34, zIndex: 20, width: 180, borderRadius: 10, border: "1px solid #1e2d3d", background: "#0d1117", padding: 4, boxShadow: "0 8px 24px #0006" }}>
+                      <button onClick={() => { setEditor({ alert, template: false }); setMenuOpen(null); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><Pencil size={13} />Edit rule</button>
+                      <button onClick={() => { setDryRun(alert); setMenuOpen(null); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><Zap size={13} />Run dry test</button>
+                      <button onClick={() => { duplicateAlert(alert); setMenuOpen(null); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><Copy size={13} />Duplicate</button>
+                      <button onClick={() => { toggleAlert(alert); setMenuOpen(null); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><SlidersHorizontal size={13} />{alert.enabled ? "Disable" : "Enable"}</button>
+                      <button onClick={() => { setDeleteId(alert.id); setMenuOpen(null); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, border: "none", background: "transparent", color: "#ef4444", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><Trash2 size={13} />Delete</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Event history */}
+      {events.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Event History</h2>
+          </div>
+          <div style={{ background: "#0a0f1a", border: "1px solid #1e2535", borderRadius: 12, overflow: "hidden" }}>
+            {events.slice(0, 10).map((event, i) => (
+              <div key={event.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", padding: "12px 16px", borderBottom: i < Math.min(events.length, 10) - 1 ? "1px solid #0f1923" : "none", transition: "background 0.1s" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.subject}</div>
+                <div style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.alertName} · {event.sender}</div>
+                <div style={{ fontSize: 10, color: "#475569", textAlign: "right" }}>{event.timestamp}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 24, fontSize: 11, color: "#374151" }}>
+        <span>Keyword Alerts <span style={{ padding: "0 4px" }}>·</span> Operations console</span>
+        <span style={{ fontFamily: "monospace" }}>No mailbox polling · No real notifications</span>
+      </div>
+
+      {/* Template Library */}
+      <TemplateLibrary onUse={(template) => setEditor({ alert: template, template: true })} />
+
+      {/* Modals */}
+      {editor && <AlertEditor initial={editor.alert} isTemplate={editor.template} telegramConnection={telegramConnection} onConfigureTelegram={() => setTelegramSetupOpen(true)} onClose={() => setEditor(null)} onSave={saveAlert} />}
+      {dryRun && <DryRunModal alert={dryRun} onClose={() => setDryRun(null)} />}
+      {telegramSetupOpen && <TelegramSetupModal connection={telegramConnection} onClose={() => setTelegramSetupOpen(false)} onSave={saveTelegramConnection} />}
+      {deleteId && (
+        <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#0d1117", border: "1px solid #1e2d3d", borderRadius: 14, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px #0008" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 }}>Delete this alert?</div>
+            <p style={{ fontSize: 12, color: "#475569", margin: "0 0 20px" }}>This removes the alert and its match history. Event history stays visible.</p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button data-testid="button-cancel-delete" onClick={() => setDeleteId(null)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #1e2d3d", background: "transparent", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              <button data-testid="button-confirm-delete" onClick={deleteAlert} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete alert</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
-     {editor && <AlertEditor initial={editor.alert} isTemplate={editor.template} telegramConnection={telegramConnection} onConfigureTelegram={() => setTelegramSetupOpen(true)} onClose={() => setEditor(null)} onSave={saveAlert} />}
-    {dryRun && <DryRunModal alert={dryRun} onClose={() => setDryRun(null)} />}
-     {telegramSetupOpen && <TelegramSetupModal connection={telegramConnection} onClose={() => setTelegramSetupOpen(false)} onSave={saveTelegramConnection} />}
-    {deleteId && <Modal title="Delete this alert?" eyebrow="Destructive action" onClose={() => setDeleteId(null)}><p className="text-sm leading-relaxed text-[#69736e]">This removes the alert and its match history. Event history stays visible.</p><div className="mt-6 flex justify-end gap-2"><button data-testid="button-cancel-delete" onClick={() => setDeleteId(null)} className="rounded-lg px-4 py-2.5 text-sm font-bold text-[#68716d] hover:bg-[#f0eee7]">Cancel</button><button data-testid="button-confirm-delete" onClick={deleteAlert} className="rounded-lg bg-[#a44135] px-4 py-2.5 text-sm font-extrabold text-[#fffaf2] hover:bg-[#8d382f]">Delete alert</button></div></Modal>}
-    <div aria-live="polite" className="fixed bottom-4 right-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2">{toasts.map((item) => <div data-testid={`toast-${item.id}`} key={item.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-xs font-bold shadow-[0_12px_30px_rgba(36,44,56,.14)] ${item.tone === 'good' ? 'border-[#b9d8c4] bg-[#edf5f0] text-[#2d6b4c]' : 'border-[#ddd8ca] bg-[#fffdf8] text-[#59605d]'}`}><Check size={15} />{item.message}</div>)}</div>
-  </div>;
+  );
 }
