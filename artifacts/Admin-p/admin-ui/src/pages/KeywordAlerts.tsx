@@ -198,7 +198,7 @@ const keywordAlertService: KeywordAlertService = {
     return response.json() as Promise<AlertEvent[]>;
   },
   async listMailboxes() {
-    const response = await authFetch(adminUrl("/keyword-alerts/mailboxes"));
+    const response = await authFetch(adminUrl("/mailboxes"));
     if (!response.ok) throw new Error("Failed to load mailboxes");
     return response.json() as Promise<string[]>;
   },
