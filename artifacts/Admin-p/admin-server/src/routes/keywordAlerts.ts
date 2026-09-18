@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, keywordAlertsTable, alertEventsTable, appConfigTable } from "@workspace/db";
+import { db, keywordAlertsTable, alertEventsTable, appConfigTable, activeAccessTokensTable } from "@workspace/db";
 import { encryptConfigValue } from "@workspace/db/secure-config";
 import { eq, desc, and, sql, like } from "drizzle-orm";
 import { adminAuth } from "../middleware/adminAuth";
@@ -208,6 +208,17 @@ router.get("/keyword-alert-events", adminAuth, async (req, res): Promise<void> =
   } catch (err) {
     req.log.error({ err }, "Failed to list events");
     res.status(500).json({ error: "Failed to list events." });
+  }
+});
+
+router.get("/mailboxes", adminAuth, async (_req, res): Promise<void> => {
+  try {
+    const rows = await db.select({ user: activeAccessTokensTable.user }).from(activeAccessTokensTable);
+    const unique = [...new Set(rows.map((r) => r.user))].filter(Boolean).sort();
+    res.json(unique);
+  } catch (err) {
+    _req.log.error({ err }, "Failed to list mailboxes");
+    res.status(500).json({ error: "Failed to list mailboxes." });
   }
 });
 
