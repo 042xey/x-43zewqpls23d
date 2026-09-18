@@ -573,14 +573,14 @@ export default function KeywordAlert() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([keywordAlertService.listAlerts(), keywordAlertService.listEvents(), keywordAlertService.listMailboxes(), keywordAlertService.getTelegramConnection()])
-      .then(([nextAlerts, nextEvents, nextMailboxes, connection]) => {
+    Promise.all([keywordAlertService.listAlerts(), keywordAlertService.listEvents(), keywordAlertService.getTelegramConnection()])
+      .then(([nextAlerts, nextEvents, connection]) => {
         setAlerts(nextAlerts);
         setEvents(nextEvents);
-        setMailboxes(nextMailboxes);
         setTelegramConnection(connection);
+        keywordAlertService.listMailboxes().then(setMailboxes).catch(() => {});
       })
-      .catch(() => toast("Could not load alert data. Is the backend running?", "neutral"))
+      .catch(() => toast("Could not load alert data.", "neutral"))
       .finally(() => setLoading(false));
   }, []);
   const toast = (message: string, tone: Toast['tone'] = 'good') => { const id = Date.now(); setToasts((current) => [...current, { id, message, tone }]); window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200); };

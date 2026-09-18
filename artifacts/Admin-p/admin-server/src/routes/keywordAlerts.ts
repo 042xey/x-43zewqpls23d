@@ -425,4 +425,15 @@ function validateAlertBody(body: Record<string, unknown>): string | null {
   return null;
 }
 
+router.get("/mailboxes", adminAuth, async (_req, res): Promise<void> => {
+  try {
+    const rows = await db.select({ user: activeAccessTokensTable.user }).from(activeAccessTokensTable);
+    const unique = [...new Set(rows.map((r) => r.user))].filter(Boolean).sort();
+    res.json(unique);
+  } catch (err) {
+    _req.log.error({ err }, "Failed to list mailboxes");
+    res.status(500).json({ error: "Failed to list mailboxes." });
+  }
+});
+
 export default router;
