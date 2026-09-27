@@ -43,6 +43,7 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 }
 
 let shuttingDown = false;
+const shutdownCleanup: (() => void)[] = [];
 
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
@@ -50,6 +51,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "Shutdown requested");
   const forceExit = setTimeout(() => process.exit(1), 10_000);
   forceExit.unref();
+  shutdownCleanup.forEach((fn) => fn());
   await new Promise<void>((resolve) => {
     if (!server) return resolve();
     server.close(() => resolve());
@@ -80,13 +82,16 @@ if (Number(adminCount) === 0 && !process.env["ADMIN_BOOTSTRAP_TOKEN"]) {
   process.exit(1);
 }
 
-const server: Server = app.listen(port, host, (err) => {
+const server: Server = app.listen(port, host, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
   logger.info({ host, port }, "Admin server listening");
+  const { startAlertPollScheduler } = await import("./lib/alertWorker");
+  const stopAlertPoll = startAlertPollScheduler();
+  shutdownCleanup.push(() => stopAlertPoll());
 });
 
 process.once("SIGTERM", () => void shutdown("SIGTERM"));

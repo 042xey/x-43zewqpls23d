@@ -85,12 +85,7 @@ export default function ActiveTokens() {
     };
   }, [loadWebmailUrl]);
 
-  async function openMailbox(accessToken: string | null | undefined) {
-    if (!accessToken) {
-      alert("Token Error");
-      return;
-    }
-
+  async function openMailbox(tokenId: number) {
     let destination = webmailUrl.trim();
     if (!destination) {
       try {
@@ -106,17 +101,26 @@ export default function ActiveTokens() {
       return;
     }
 
-    try {
-      const safeDestination = safeExternalUrl(destination);
-      if (!safeDestination) {
-        alert("The saved Webmail URL is invalid. Update it in Settings.");
-        return;
-      }
-      const url = new URL(safeDestination);
-      url.searchParams.set("access_token", accessToken);
-      window.open(url.toString(), "_blank", "noopener,noreferrer");
-    } catch {
+    const safeDestination = safeExternalUrl(destination);
+    if (!safeDestination) {
       alert("The saved Webmail URL is invalid. Update it in Settings.");
+      return;
+    }
+
+    try {
+      const res = await authFetch(adminUrl(`/tokens/${tokenId}/sso-link`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webmailUrl: safeDestination }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `Error ${res.status}`);
+      }
+      const j = (await res.json()) as { ssoUrl: string };
+      window.open(j.ssoUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to open mailbox");
     }
   }
 
@@ -230,7 +234,7 @@ export default function ActiveTokens() {
       await loadTokens(appFilter);
       setTab("access");
       if (openAfterRefresh) {
-        await openMailbox(j.access_token.access_token);
+        await openMailbox(j.access_token.id);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get new access token");
@@ -598,7 +602,7 @@ export default function ActiveTokens() {
                       {t.expired ? "Expired" : "Active"}
                     </span>
                     <button
-                      onClick={() => openMailbox(t.access_token)}
+                      onClick={() => openMailbox(t.id)}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa", display: "flex" }}
                       title="Open mailbox"
                     >

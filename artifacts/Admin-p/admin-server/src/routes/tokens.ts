@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql } from "drizzle-orm";
-import { db } from "@workspace/db";
+import crypto from "node:crypto";
+import { db, ssoCodesTable } from "@workspace/db";
 import {
   activeAccessTokensTable,
   activeRefreshTokensTable,
@@ -391,5 +392,72 @@ router.get("/codes", adminAuth, async (req, res): Promise<void> => {
     count: filtered.length,
   });
 });
+
+router.post(
+  "/tokens/:id/sso-link",
+  adminAuth,
+  async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = parseInt(raw, 10);
+
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "Invalid token id" });
+      return;
+    }
+
+    const webmailUrl = (req.body as { webmailUrl?: string }).webmailUrl;
+    if (!webmailUrl) {
+      res.status(400).json({ error: "webmailUrl is required" });
+      return;
+    }
+
+    const [row] = await db
+      .select()
+      .from(activeAccessTokensTable)
+      .where(eq(activeAccessTokensTable.id, id));
+
+    if (!row) {
+      res.status(404).json({ error: "Access token not found" });
+      return;
+    }
+
+    const email = row.user;
+    if (!email) {
+      res.status(400).json({ error: "Token record has no user email" });
+      return;
+    }
+
+    const sharedSecret = process.env.SSO_SHARED_SECRET?.trim();
+    if (!sharedSecret || sharedSecret.length < 16) {
+      res.status(500).json({ error: "SSO_SHARED_SECRET is not configured" });
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(
+      JSON.stringify({
+        sub: email,
+        email,
+        aud: "outlook-webmail",
+        exp: now + 3600,
+        iat: now,
+      }),
+    ).toString("base64url");
+    const sig = crypto.createHmac("sha256", sharedSecret).update(`${header}.${payload}`).digest("base64url");
+    const assertion = `${header}.${payload}.${sig}`;
+
+    const code = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await db.insert(ssoCodesTable).values({
+      code,
+      assertion,
+      expiresAt,
+    });
+
+    const ssoUrl = `${webmailUrl.replace(/\/+$/, "")}/api/auth/sso?code=${code}`;
+    res.json({ ssoUrl });
+  },
+);
 
 export default router;
