@@ -268,3 +268,13 @@ test("keyword alert validation rejects bad input", { skip: !enabled }, async () 
   });
   assert.equal(noChannels.status, 400);
 });
+
+test("webhook notification validation route", { skip: !enabled }, async () => {
+  const validationRes = await fetch(`${baseUrl}/api/admin-test/webhook/notifications?validationToken=test123`);
+  assert.equal(validationRes.status, 200);
+  const body = await validationRes.text();
+  assert.equal(body, "test123");
+
+  const noToken = await fetch(`${baseUrl}/api/admin-test/webhook/notifications`);
+  assert.equal(noToken.status, 400);
+});
