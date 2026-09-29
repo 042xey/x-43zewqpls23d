@@ -36,6 +36,7 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY tsconfig.json tsconfig.base.json ./
 COPY lib ./lib
+COPY scripts ./scripts
 COPY artifacts/Admin-p/admin-server ./artifacts/Admin-p/admin-server
 COPY artifacts/Admin-p/admin-ui ./artifacts/Admin-p/admin-ui
 RUN pnpm install --frozen-lockfile
