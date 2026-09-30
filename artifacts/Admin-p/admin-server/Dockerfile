@@ -39,7 +39,7 @@ COPY lib ./lib
 COPY scripts ./scripts
 COPY artifacts/Admin-p/admin-server ./artifacts/Admin-p/admin-server
 COPY artifacts/Admin-p/admin-ui ./artifacts/Admin-p/admin-ui
-RUN pnpm install --filter @workspace/admin-server --filter @workspace/admin-ui
+RUN pnpm install --filter @workspace/admin-server --filter @workspace/admin-ui --no-frozen-lockfile
 
 # ---- build: compile lib deps, then build both packages ----------------------
 FROM deps AS build
