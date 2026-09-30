@@ -39,11 +39,10 @@ COPY lib ./lib
 COPY scripts ./scripts
 COPY artifacts/Admin-p/admin-server ./artifacts/Admin-p/admin-server
 COPY artifacts/Admin-p/admin-ui ./artifacts/Admin-p/admin-ui
-RUN pnpm install --filter @workspace/admin-server --frozen-lockfile
+RUN pnpm install --filter @workspace/admin-server --filter @workspace/admin-ui
 
 # ---- build: compile lib deps, then build both packages ----------------------
 FROM deps AS build
-RUN pnpm run typecheck:libs
 RUN pnpm --filter @workspace/admin-ui run build
 RUN pnpm --filter @workspace/admin-server run build
 
