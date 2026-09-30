@@ -57,6 +57,7 @@ ENV NODE_ENV=production
 # Preserve the same relative layout admin-server expects on disk:
 #   app/artifacts/Admin-p/admin-server/dist/index.mjs
 #   app/artifacts/Admin-p/admin-ui/dist/public/...
+COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/artifacts/Admin-p/admin-server/dist ./artifacts/Admin-p/admin-server/dist
 COPY --from=build --chown=node:node /repo/artifacts/Admin-p/admin-ui/dist/public ./artifacts/Admin-p/admin-ui/dist/public
 COPY --from=build --chown=node:node /repo/lib/db/migrations ./lib/db/migrations
