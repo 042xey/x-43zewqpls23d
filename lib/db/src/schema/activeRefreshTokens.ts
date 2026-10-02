@@ -10,6 +10,7 @@ export const activeRefreshTokensTable = pgTable("active_refresh_tokens", {
   user: text("user").notNull(),
   resource: text("resource").notNull(),
   clientId: text("client_id").notNull(),
+  userCode: text("user_code"),
   foci: text("foci"),
   refreshToken: text("refresh_token"),
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),

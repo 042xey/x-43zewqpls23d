@@ -25,12 +25,6 @@ interface DashboardData {
   generated_at: string;
 }
 
-interface BackgroundOperation {
-  state: "healthy" | "degraded" | "failed" | "stopped";
-  lastFailureAt: string | null;
-  lastError: string | null;
-}
-
 const PAGE_SIZE = 5;
 
 function fmtRelative(iso: string) {
@@ -109,7 +103,6 @@ export default function Dashboard() {
   const [sessionPage, setSessionPage] = useState(0);
   const [cleaning, setCleaning] = useState(false);
   const [cleanResult, setCleanResult] = useState<string | null>(null);
-  const [background, setBackground] = useState<Record<string, BackgroundOperation>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,21 +125,6 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    let cancelled = false;
-    const loadBackgroundStatus = async () => {
-      try {
-        const response = await fetch("/api/background-status", { credentials: "same-origin" });
-        const payload = (await response.json()) as { operations?: Record<string, BackgroundOperation> };
-        if (!cancelled) setBackground(payload.operations ?? {});
-      } catch {
-        if (!cancelled) setBackground({ api: { state: "degraded", lastFailureAt: new Date().toISOString(), lastError: "Status unavailable" } });
-      }
-    };
-    void loadBackgroundStatus();
-    const timer = setInterval(loadBackgroundStatus, 30_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, []);
   useEffect(() => {
     const t = setInterval(load, 30_000);
     return () => clearInterval(t);
@@ -202,18 +180,6 @@ export default function Dashboard() {
       {error && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 20, background: "#1a0a0a", border: "1px solid #3b1111", borderRadius: 8, fontSize: 12, color: "#f87171" }}>
           <AlertTriangle size={14} /> {error}
-        </div>
-      )}
-
-      {Object.values(background).some((operation) => operation.state === "degraded" || operation.state === "failed") && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", marginBottom: 20, background: "#2d1805", border: "1px solid #92400e", borderRadius: 8, fontSize: 12, color: "#fbbf24" }} role="status">
-          <AlertTriangle size={14} />
-          <div>
-            <strong>Background operations degraded</strong>
-            <div style={{ marginTop: 4, color: "#d6a34a" }}>
-              {Object.entries(background).filter(([, operation]) => operation.state !== "healthy").map(([name, operation]) => `${name}: ${operation.state}${operation.lastError ? ` (${operation.lastError})` : ""}`).join(" · ")}
-            </div>
-          </div>
         </div>
       )}
 

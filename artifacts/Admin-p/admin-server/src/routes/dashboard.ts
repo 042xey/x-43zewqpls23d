@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { adminAuth } from "../middleware/adminAuth";
 import { CLIENT_ALIAS_MAP } from "../lib/clientAliases";
+import { buildSessionAudit, isRefreshTokenLive } from "../lib/sessions";
 
 const router: IRouter = Router();
 
@@ -25,47 +26,30 @@ router.get("/dashboard", adminAuth, async (_req, res): Promise<void> => {
   const accessExpired = accessRows.length - accessActive;
 
   // --- Refresh Tokens ---
-  const refreshLive = refreshRows.filter((t) => !t.invalidatedAt).length;
+  const refreshLive = refreshRows.filter((t) => isRefreshTokenLive(t, now)).length;
   const refreshInvalidated = refreshRows.length - refreshLive;
   const refreshExpiringSoon = refreshRows.filter((t) => {
     if (t.invalidatedAt || !t.refreshTokenExpiresAt) return false;
     return t.refreshTokenExpiresAt.getTime() - now.getTime() < 7 * 24 * 60 * 60 * 1000;
   }).length;
 
-  // --- Device Codes (treat stale POLLING as EXPIRED in-memory) ---
-  const deviceCodes = deviceRows.map((d) => {
-    if (d.status === "POLLING" && d.expiresAt <= now) return { ...d, status: "EXPIRED" as const };
-    return d;
-  });
-  const codesPolling = deviceCodes.filter((d) => d.status === "POLLING").length;
-  const codesAuthorized = deviceCodes.filter((d) => d.status === "SUCCESS").length;
-  const codesExpired = deviceCodes.filter((d) => d.status === "EXPIRED").length;
+  // --- Device Codes + Active Sessions (shared audit derivation) ---
+  const audit = buildSessionAudit(deviceRows, refreshRows, now);
+  const codesPolling = audit.filter((s) => s.status === "POLLING").length;
+  const codesAuthorized = audit.filter((s) => s.status === "SUCCESS").length;
+  const codesExpired = audit.filter((s) => s.status === "EXPIRED").length;
 
-  // --- Active Sessions ---
-  // Only SUCCESS codes whose matched refresh token is still live (not invalidated).
-  const successCodes = deviceCodes.filter((d) => d.status === "SUCCESS");
-  const allSessions = successCodes.map((d) => {
-    const appName = CLIENT_ALIAS_MAP[d.clientId]?.name ?? d.clientId;
-    const matchingRt = refreshRows
-      .filter((r) => r.clientId === d.clientId)
-      .sort(
-        (a, b) =>
-          Math.abs(a.storedAt.getTime() - d.generatedAt.getTime()) -
-          Math.abs(b.storedAt.getTime() - d.generatedAt.getTime()),
-      )[0];
-    return {
-      user_code: d.userCode,
-      app: appName,
-      alias: d.clientId,
-      authorized_at: d.lastPolledAt?.toISOString() ?? d.generatedAt.toISOString(),
-      user: matchingRt?.user ?? null,
-      refresh_token_active: matchingRt ? !matchingRt.invalidatedAt : false,
-    };
-  });
-
-  // Only include sessions with a live refresh token
-  const activeSessions = allSessions
-    .filter((s) => s.refresh_token_active)
+  // Only SUCCESS codes whose linked refresh token is still live.
+  const activeSessions = audit
+    .filter((s) => s.status === "SUCCESS" && s.refresh_token_active === true)
+    .map((s) => ({
+      user_code: s.user_code,
+      app: s.app,
+      alias: s.alias,
+      authorized_at: s.authorized_at ?? s.generated_at,
+      user: s.user,
+      refresh_token_active: true,
+    }))
     .sort((a, b) => new Date(b.authorized_at).getTime() - new Date(a.authorized_at).getTime());
 
   // --- Recent activity feed ---
@@ -88,12 +72,12 @@ router.get("/dashboard", adminAuth, async (_req, res): Promise<void> => {
       ts: r.invalidatedAt!.toISOString(),
     });
   }
-  for (const d of successCodes.slice(0, 10)) {
+  for (const s of audit.filter((row) => row.status === "SUCCESS").slice(0, 10)) {
     activity.push({
       type: "auth",
       label: "Device code authorized",
-      sub: `${CLIENT_ALIAS_MAP[d.clientId]?.name ?? d.clientId}`,
-      ts: d.lastPolledAt?.toISOString() ?? d.generatedAt.toISOString(),
+      sub: s.app,
+      ts: s.authorized_at ?? s.generated_at,
     });
   }
   const recentActivity = activity
@@ -113,7 +97,7 @@ router.get("/dashboard", adminAuth, async (_req, res): Promise<void> => {
       expiring_soon: refreshExpiringSoon,
     },
     device_codes: {
-      total: deviceCodes.length,
+      total: deviceRows.length,
       polling: codesPolling,
       authorized: codesAuthorized,
       expired: codesExpired,

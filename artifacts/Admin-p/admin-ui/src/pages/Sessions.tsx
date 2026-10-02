@@ -179,7 +179,7 @@ function AuditDetail({ s }: { s: Session }) {
           <div style={{ display: "flex", gap: 12, padding: "5px 0" }}>
             <span style={{ minWidth: 140, fontSize: 11, color: "#64748b", fontWeight: 600 }}>Token Status</span>
             {s.refresh_token_active === null ? (
-              <span style={{ fontSize: 11, color: "#374151", fontStyle: "italic" }}>No token captured</span>
+              <span title="No refresh token is linked to this device code (pre-migration record)" style={{ fontSize: 11, color: "#374151", fontStyle: "italic" }}>No token captured</span>
             ) : s.refresh_token_active ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#22c55e" }}><ShieldCheck size={12} /> Live</span>
             ) : (
@@ -288,7 +288,14 @@ export default function Sessions() {
   const authorized = sessions.filter((s) => s.status === "SUCCESS").length;
   const polling = sessions.filter((s) => s.status === "POLLING").length;
   const expired = sessions.filter((s) => s.status === "EXPIRED").length;
-  const liveTokens = sessions.filter((s) => s.refresh_token_active === true).length;
+  const liveTokens = new Set(
+    sessions
+      .filter((s) => s.refresh_token_active === true && s.refresh_token_id !== null)
+      .map((s) => s.refresh_token_id),
+  ).size;
+  const authorizedWithoutToken = sessions.filter(
+    (s) => s.status === "SUCCESS" && s.refresh_token_id === null,
+  ).length;
 
   const hasFilters = search || appFilter || statusFilter;
 
@@ -347,6 +354,9 @@ export default function Sessions() {
             { label: "Polling", value: polling, color: "#f59e0b", Icon: Clock },
             { label: "Expired", value: expired, color: "#6b7280", Icon: XCircle },
             { label: "Live Tokens", value: liveTokens, color: "#3b82f6", Icon: Wifi },
+            ...(authorizedWithoutToken > 0
+              ? [{ label: "No Token", value: authorizedWithoutToken, color: "#6b7280", Icon: ShieldOff }]
+              : []),
           ].map((p) => (
             <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 14px", borderRadius: 20, background: "#0a0f1a", border: "1px solid #1e2535", fontSize: 11, fontWeight: 600, color: p.color }}>
               <p.Icon size={11} />
@@ -450,7 +460,11 @@ export default function Sessions() {
                         </div>
                       ) : (
                         <span style={{ fontSize: 11, color: "#374151", fontStyle: "italic" }}>
-                          {s.status === "POLLING" ? "Awaiting sign-in…" : "Not authenticated"}
+                          {s.status === "POLLING"
+                            ? "Awaiting sign-in…"
+                            : s.status === "SUCCESS"
+                              ? "Authorized · identity unavailable"
+                              : "Not authenticated"}
                         </span>
                       )}
                     </div>
@@ -490,7 +504,7 @@ export default function Sessions() {
                     {/* Token */}
                     <div>
                       {s.refresh_token_active === null ? (
-                        <span style={{ fontSize: 10, color: "#374151", fontStyle: "italic" }}>No token</span>
+                        <span title="No refresh token is linked to this device code (pre-migration record)" style={{ fontSize: 10, color: "#374151", fontStyle: "italic" }}>No token</span>
                       ) : s.refresh_token_active ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "#22c55e" }}>
                           <ShieldCheck size={11} /> Live

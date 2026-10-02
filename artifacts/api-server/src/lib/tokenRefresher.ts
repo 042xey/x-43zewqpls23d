@@ -15,6 +15,7 @@ import { recordFailure, recordMetric } from "./metrics";
 import { markBackgroundFailure, markBackgroundSuccess, markBackgroundStopped } from "./backgroundStatus";
 
 const REFRESH_BEFORE_EXPIRY_MS = 5 * 60 * 1000;
+const REFRESH_TOKEN_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 const activeTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 5_000;
@@ -118,12 +119,16 @@ async function doRefresh(
   const newRefreshToken = token.refresh_token
     ? encryptConfigValue(token.refresh_token)
     : rtRow.refreshToken;
+  const refreshTokenExpiresAt = token.refresh_token
+    ? new Date(issuedAt.getTime() + REFRESH_TOKEN_LIFETIME_MS)
+    : rtRow.refreshTokenExpiresAt;
     await db
     .update(activeRefreshTokensTable)
     .set({
       refreshToken: newRefreshToken,
       lastRefreshedAt: issuedAt,
       nextRefreshAt: new Date(expiresAt.getTime() - REFRESH_BEFORE_EXPIRY_MS),
+      refreshTokenExpiresAt,
     })
       .where(eq(activeRefreshTokensTable.id, refreshTokenId));
   } catch (err) {

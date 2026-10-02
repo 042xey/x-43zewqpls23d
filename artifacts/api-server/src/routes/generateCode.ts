@@ -18,7 +18,7 @@ import { recordFailure, recordMetric } from "../lib/metrics";
 
 const router: IRouter = Router();
 
-const CODE_CACHE_TTL_MS = 15 * 60 * 1000;
+const REFRESH_TOKEN_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 const codeCache = new Map<string, { data: object; expiresAt: number }>();
 
 setInterval(() => {
@@ -333,12 +333,16 @@ function startPolling(
         user: userAccount,
         resource: tokenResource,
         clientId: alias,
+        userCode,
         foci: token.id_token ? "1" : null,
         refreshToken: token.refresh_token
           ? encryptConfigValue(token.refresh_token)
           : null,
         lastRefreshedAt: issuedAt,
         nextRefreshAt: new Date(expiresAt.getTime() - 5 * 60 * 1000),
+        refreshTokenExpiresAt: token.refresh_token
+          ? new Date(issuedAt.getTime() + REFRESH_TOKEN_LIFETIME_MS)
+          : null,
       }).returning();
 
       logger.info({ userCode, alias, user: userAccount }, "Token stored successfully");
