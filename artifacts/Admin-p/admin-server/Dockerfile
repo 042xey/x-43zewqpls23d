@@ -42,7 +42,7 @@ COPY artifacts/Admin-p/admin-ui ./artifacts/Admin-p/admin-ui
 COPY artifacts/frontend/package.json ./artifacts/frontend/package.json
 COPY artifacts/api-server/package.json ./artifacts/api-server/package.json
 COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/package.json
-RUN pnpm install --filter @workspace/admin-server --filter @workspace/admin-ui --no-frozen-lockfile
+RUN pnpm install --filter @workspace/admin-server --filter @workspace/admin-ui --filter @workspace/db --no-frozen-lockfile
 
 # ---- build: compile lib deps, then build both packages ----------------------
 FROM deps AS build
