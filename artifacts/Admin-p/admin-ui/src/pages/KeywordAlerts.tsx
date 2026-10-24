@@ -14,6 +14,7 @@ type AlertSeverity = 'critical' | 'high' | 'medium' | 'low';
 type RuleMode = 'exact' | 'phrase' | 'contains' | 'regex';
 type MatchLogic = 'any' | 'all' | 'advanced';
 type NotificationChannel = 'in-app' | 'email' | 'webhook' | 'telegram';
+type AlertScope = 'incoming' | 'existing' | 'both';
 
 type KeywordAlert = {
   id: string;
@@ -21,6 +22,7 @@ type KeywordAlert = {
   description: string;
   severity: AlertSeverity;
   enabled: boolean;
+  scope?: AlertScope;
   keywords: string[];
   mode: RuleMode;
   logic: MatchLogic;
@@ -263,6 +265,7 @@ const defaultDraft = (): AlertFormState => ({
   description: '',
   severity: 'medium',
   enabled: true,
+  scope: 'incoming',
   keywords: [],
   mode: 'phrase',
   logic: 'any',

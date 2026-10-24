@@ -11,6 +11,7 @@ const router: IRouter = Router();
 const VALID_SEVERITIES = ["critical", "high", "medium", "low"] as const;
 const VALID_MODES = ["exact", "phrase", "contains", "regex"] as const;
 const VALID_LOGIC = ["any", "all", "advanced"] as const;
+const VALID_SCOPES = ["incoming", "existing", "both"] as const;
 const VALID_CHANNELS = ["in-app", "email", "webhook", "telegram"] as const;
 const MAX_KEYWORD_LENGTH = 200;
 const MAX_NAME_LENGTH = 200;
@@ -60,6 +61,7 @@ router.post("/keyword-alerts", adminAuth, async (req, res): Promise<void> => {
       description: String(body.description ?? "").trim(),
       severity: body.severity as string,
       enabled: body.enabled !== false,
+      scope: (body.scope ?? "incoming") as string,
       keywords: body.keywords as string[],
       mode: body.mode as string,
       logic: body.logic as string,
@@ -106,6 +108,7 @@ router.patch("/keyword-alerts/:id", adminAuth, async (req, res): Promise<void> =
     if (body.description !== undefined) updates.description = String(body.description).trim();
     if (body.severity !== undefined) updates.severity = body.severity;
     if (body.enabled !== undefined) updates.enabled = body.enabled === true;
+    if (body.scope !== undefined) updates.scope = body.scope;
     if (body.keywords !== undefined) updates.keywords = body.keywords;
     if (body.mode !== undefined) updates.mode = body.mode;
     if (body.logic !== undefined) updates.logic = body.logic;
@@ -302,6 +305,7 @@ function mapAlert(row: Record<string, unknown>) {
     description: row.description,
     severity: row.severity,
     enabled: row.enabled,
+    scope: row.scope,
     keywords: row.keywords,
     mode: row.mode,
     logic: row.logic,
@@ -388,6 +392,11 @@ function validateAlertBody(body: Record<string, unknown>): string | null {
   const logic = body.logic;
   if (logic && !(VALID_LOGIC as readonly string[]).includes(logic as string)) {
     return `Invalid logic: "${logic}". Must be one of: ${VALID_LOGIC.join(", ")}.`;
+  }
+
+  const scope = body.scope;
+  if (scope && !(VALID_SCOPES as readonly string[]).includes(scope as string)) {
+    return `Invalid scope: "${scope}". Must be one of: ${VALID_SCOPES.join(", ")}.`;
   }
 
   const cooldown = body.cooldown;

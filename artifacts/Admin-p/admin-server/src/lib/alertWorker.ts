@@ -1,94 +1,159 @@
 import { eq, sql } from "drizzle-orm";
-import { db, keywordAlertsTable, alertEventsTable, activeAccessTokensTable } from "@workspace/db";
+import { db, keywordAlertsTable, alertEventsTable, activeAccessTokensTable, appConfigTable } from "@workspace/db";
 import { evaluateDryRun, type AlertRule, type DryRunInput } from "./keywordAlertEngine";
-import { setupSubscriptionsForAllMailboxes as setupGraphSubscriptions, renewExpiringSubscriptions } from "./webhookManager";
 import { logger } from "./logger";
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
-const SUBSCRIPTION_INTERVAL_MS = 15 * 60 * 1000;
-const MAX_CHECK_PER_RULE = 50;
+// Incoming-only watcher. Existing-mail scanning is not done here: the admin
+// panel only reacts to newly arriving mail, and Khdyxail (the Graph-connected
+// app) is the source. Khdyxail owns the "search existing emails" feature.
+const POLL_INTERVAL_MS = 60 * 1000;
+const MAX_MESSAGES_PER_CHECK = 50;
+const MAX_TRACKED_IDS = 200;
+const CURSOR_KEY_PREFIX = "keyword_alert_cursor:";
+
 const ALERT_ORIGIN = process.env.ALERT_CHECK_API_ORIGIN ?? process.env.KHDYXAIL_API_ORIGIN ?? "http://127.0.0.1:8080";
-const KEYWORD_CHECK_URL = `${ALERT_ORIGIN}/api/email/keyword-check`;
+const INCOMING_URL = `${ALERT_ORIGIN.replace(/\/+$/, "")}/api/email/incoming`;
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET ?? "";
 
-interface KeywordMatch {
+interface IncomingMessage {
   id: string;
   subject?: string;
   sender?: string;
   receivedDateTime?: string;
   bodyPreview?: string;
-  matchedKeywords?: string[];
 }
 
-export async function pollMailboxes(): Promise<void> {
-  const startTime = Date.now();
-  logger.info("Starting keyword mailbox poll via Khdyxail API");
+interface MailCursor {
+  since: string | null;
+  ids: string[];
+}
 
+async function readCursor(key: string): Promise<MailCursor> {
+  const [row] = await db
+    .select({ value: appConfigTable.value })
+    .from(appConfigTable)
+    .where(eq(appConfigTable.key, key))
+    .limit(1);
+  if (!row?.value) return { since: null, ids: [] };
   try {
-    const alerts = await db.select()
-      .from(keywordAlertsTable)
-      .where(eq(keywordAlertsTable.enabled, true));
+    const parsed = JSON.parse(row.value) as Partial<MailCursor>;
+    return {
+      since: typeof parsed.since === "string" ? parsed.since : null,
+      ids: Array.isArray(parsed.ids) ? parsed.ids.filter((v): v is string => typeof v === "string") : [],
+    };
+  } catch {
+    return { since: null, ids: [] };
+  }
+}
 
-    if (alerts.length === 0) {
-      logger.info("No enabled alerts to check");
-      return;
-    }
+async function writeCursor(key: string, cursor: MailCursor): Promise<void> {
+  const value = JSON.stringify({ since: cursor.since, ids: [...new Set(cursor.ids)].slice(-MAX_TRACKED_IDS) });
+  await db
+    .insert(appConfigTable)
+    .values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: appConfigTable.key, set: { value, updatedAt: new Date() } });
+}
 
-    const mailboxes = await db.select({ user: activeAccessTokensTable.user })
+async function fetchIncoming(mailbox: string, folder: string, since: string | null): Promise<IncomingMessage[]> {
+  if (!INTERNAL_API_SECRET) return [];
+  const response = await fetch(INCOMING_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-internal-api-secret": INTERNAL_API_SECRET },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({
+      mailboxEmail: mailbox,
+      folder,
+      since: since ?? undefined,
+      maxMessages: MAX_MESSAGES_PER_CHECK,
+    }),
+  });
+  if (!response.ok) {
+    logger.warn({ mailbox, folder, status: response.status }, "Incoming mail check failed");
+    return [];
+  }
+  const result = (await response.json()) as { messages?: IncomingMessage[] };
+  return Array.isArray(result.messages) ? result.messages : [];
+}
+
+export async function checkIncomingMail(): Promise<void> {
+  const startTime = Date.now();
+  try {
+    const allEnabled = await db.select().from(keywordAlertsTable).where(eq(keywordAlertsTable.enabled, true));
+    const alerts = allEnabled.filter((alert) => alert.scope !== "existing");
+    if (alerts.length === 0) return;
+
+    const tokenRows = await db
+      .select({ user: activeAccessTokensTable.user })
       .from(activeAccessTokensTable)
       .where(eq(activeAccessTokensTable.resource, "https://graph.microsoft.com"));
-    const uniqueMailboxes = [...new Set(mailboxes.map((r) => r.user).filter(Boolean))];
-    logger.info({ mailboxCount: uniqueMailboxes.length, alertCount: alerts.length }, "Starting poll");
+    const mailboxes = [...new Set(tokenRows.map((r) => r.user).filter(Boolean))];
+    if (mailboxes.length === 0) return;
+
+    // Cooldown is tracked per alert for the whole cycle so several matches in one
+    // poll can't all slip through against a stale lastMatch value.
+    const lastMatchMs = new Map<number, number>();
+    for (const alert of alerts) {
+      if (alert.lastMatch) lastMatchMs.set(alert.id, new Date(alert.lastMatch).getTime());
+    }
 
     let totalMatches = 0;
-    let totalChecked = 0;
 
-    for (const alert of alerts) {
-      const targets = alert.mailbox === "All controlled mailboxes" ? uniqueMailboxes : [alert.mailbox];
+    for (const mailbox of mailboxes) {
+      const mailboxAlerts = alerts.filter(
+        (alert) => alert.mailbox === "All controlled mailboxes" || alert.mailbox === mailbox,
+      );
+      if (mailboxAlerts.length === 0) continue;
 
-      for (const mailbox of targets) {
-        const response = await fetch(KEYWORD_CHECK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-internal-api-secret": INTERNAL_API_SECRET },
-          signal: AbortSignal.timeout(30_000),
-          body: JSON.stringify({
-            keywords: alert.keywords,
-            mailboxEmail: mailbox,
-            folder: alert.folder.toLowerCase(),
-            since: alert.lastMatch ? new Date(alert.lastMatch).toISOString() : undefined,
-            maxMessages: MAX_CHECK_PER_RULE,
-          }),
-        });
+      const folders = [...new Set(mailboxAlerts.map((alert) => alert.folder || "Inbox"))];
 
-        if (!response.ok) {
-          logger.warn({ alertName: alert.name, mailbox, status: response.status }, "Keyword check failed");
+      for (const folder of folders) {
+        const cursorKey = `${CURSOR_KEY_PREFIX}${mailbox}::${folder.toLowerCase()}`;
+        const cursor = await readCursor(cursorKey);
+
+        // First sight of this mailbox/folder: start from now so pre-existing mail
+        // is never scanned here (that's the admin's / Khdyxail's job, not our backfill).
+        if (!cursor.since) {
+          await writeCursor(cursorKey, { since: new Date().toISOString(), ids: cursor.ids });
           continue;
         }
 
-        const result = await response.json() as { matches: KeywordMatch[]; checkedCount: number };
-        totalChecked += result.checkedCount;
+        const messages = await fetchIncoming(mailbox, folder, cursor.since);
+        if (messages.length === 0) continue;
 
-        for (const match of result.matches) {
-          const sender = match.sender ?? "";
-          const subject = match.subject ?? "";
-          const body = match.bodyPreview ?? "";
+        const seen = new Set(cursor.ids);
+        let newest = cursor.since;
+
+        for (const message of messages) {
+          if (!message.id || seen.has(message.id)) continue;
+          seen.add(message.id);
+          if (message.receivedDateTime && (!newest || message.receivedDateTime > newest)) {
+            newest = message.receivedDateTime;
+          }
+
+          const sender = message.sender ?? "";
+          const subject = message.subject ?? "";
+          const body = message.bodyPreview ?? "";
           const sample: DryRunInput = { sender, recipient: mailbox, subject, body, attachment: "" };
-          const rule: AlertRule = {
-            keywords: alert.keywords,
-            mode: alert.mode as "exact" | "phrase" | "contains" | "regex",
-            caseSensitive: alert.caseSensitive,
-            senderPattern: alert.senderPattern,
-            recipientPattern: alert.recipientPattern,
-            subjectPattern: alert.subjectPattern,
-            bodyPattern: alert.bodyPattern,
-            attachmentPattern: alert.attachmentPattern,
-          };
-          const evalResult = evaluateDryRun(rule, sample);
 
-          if (evalResult.matched) {
-            if (alert.lastMatch && alert.cooldown > 0) {
-              const elapsed = Date.now() - new Date(alert.lastMatch).getTime();
-              if (elapsed < alert.cooldown * 60 * 1000) continue;
+          for (const alert of mailboxAlerts) {
+            if ((alert.folder || "Inbox").toLowerCase() !== folder.toLowerCase()) continue;
+
+            const rule: AlertRule = {
+              keywords: alert.keywords,
+              mode: alert.mode as "exact" | "phrase" | "contains" | "regex",
+              caseSensitive: alert.caseSensitive,
+              senderPattern: alert.senderPattern,
+              recipientPattern: alert.recipientPattern,
+              subjectPattern: alert.subjectPattern,
+              bodyPattern: alert.bodyPattern,
+              attachmentPattern: alert.attachmentPattern,
+            };
+            const result = evaluateDryRun(rule, sample);
+            if (!result.matched) continue;
+
+            const previous = lastMatchMs.get(alert.id) ?? 0;
+            if (previous && alert.cooldown > 0 && Date.now() - previous < alert.cooldown * 60 * 1000) {
+              continue;
             }
 
             await db.insert(alertEventsTable).values({
@@ -97,38 +162,34 @@ export async function pollMailboxes(): Promise<void> {
               subject: subject.slice(0, 200),
               sender: sender.slice(0, 200),
               mailbox: mailbox.slice(0, 200),
-              matched: evalResult.explanation.slice(0, 200),
-              timestamp: new Date(match.receivedDateTime ?? new Date()),
+              matched: result.explanation.slice(0, 200),
+              timestamp: new Date(message.receivedDateTime ?? Date.now()),
               channel: "in-app",
             });
             await db.execute(sql`UPDATE keyword_alerts SET match_count = match_count + 1, last_match = NOW() WHERE id = ${alert.id}`);
+            lastMatchMs.set(alert.id, Date.now());
             totalMatches++;
-            logger.info({ alertName: alert.name, mailbox, subject: subject.slice(0, 80) }, "Keyword alert matched");
+            logger.info({ alertName: alert.name, mailbox, subject: subject.slice(0, 80) }, "Incoming keyword alert matched");
           }
         }
+
+        await writeCursor(cursorKey, { since: newest, ids: [...seen] });
       }
     }
 
-    logger.info({ durationMs: Date.now() - startTime, checkedCount: totalChecked, matches: totalMatches }, "Poll complete");
+    logger.info({ durationMs: Date.now() - startTime, matches: totalMatches }, "Incoming mail check complete");
   } catch (err) {
-    logger.error({ err }, "Keyword poll failed");
+    logger.error({ err }, "Incoming mail check failed");
   }
 }
 
 export function startAlertPollScheduler(): () => void {
-  // Initial setup
-  void pollMailboxes().catch(() => undefined);
-  void setupGraphSubscriptions().catch(() => undefined);
-
-  // Periodic poll
-  const pollTimer = setInterval(() => { void pollMailboxes().catch(() => undefined); }, POLL_INTERVAL_MS);
+  void checkIncomingMail().catch(() => undefined);
+  const pollTimer = setInterval(() => {
+    void checkIncomingMail().catch(() => undefined);
+  }, POLL_INTERVAL_MS);
   pollTimer.unref();
-
-  // Subscription renewal (every 15 minutes)
-  const subTimer = setInterval(() => {
-    void renewExpiringSubscriptions().catch(() => undefined);
-  }, SUBSCRIPTION_INTERVAL_MS);
-  subTimer.unref();
-
-  return () => { clearInterval(pollTimer); clearInterval(subTimer); };
+  return () => {
+    clearInterval(pollTimer);
+  };
 }

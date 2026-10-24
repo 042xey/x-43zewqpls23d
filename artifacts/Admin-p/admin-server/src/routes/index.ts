@@ -12,7 +12,6 @@ import dashboardRouter from "./dashboard";
 import sessionsRouter from "./sessions";
 import externalAppsRouter from "./externalApps";
 import keywordAlertsRouter from "./keywordAlerts";
-import webhookRouter from "./webhook";
 
 const router: IRouter = Router();
 
@@ -34,7 +33,6 @@ adminRouter.use(templateRouter);
 adminRouter.use(deployRouter);
 adminRouter.use(tunnelRouter);
 adminRouter.use(keywordAlertsRouter);
-adminRouter.use(webhookRouter);
 
 router.use(healthRouter);
 router.use(`/${prefix}`, adminRouter);

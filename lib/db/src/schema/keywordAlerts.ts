@@ -20,12 +20,19 @@ export const alertLogicEnum = pgEnum("alert_logic", [
   "advanced",
 ]);
 
+export const alertScopeEnum = pgEnum("alert_scope", [
+  "incoming",
+  "existing",
+  "both",
+]);
+
 export const keywordAlertsTable = pgTable("keyword_alerts", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
   severity: alertSeverityEnum("severity").notNull().default("medium"),
   enabled: boolean("enabled").notNull().default(true),
+  scope: alertScopeEnum("scope").notNull().default("incoming"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default([]),
   mode: alertModeEnum("mode").notNull().default("phrase"),
   logic: alertLogicEnum("logic").notNull().default("any"),
