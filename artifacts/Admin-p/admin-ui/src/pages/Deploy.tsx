@@ -324,6 +324,7 @@ export default function Deploy() {
     Array(10).fill(""),
   );
   const [kvBindingName, setKvBindingName] = useState("");
+  const [workerName, setWorkerName] = useState("");
 
   useEffect(() => {
     authFetch(adminUrl("/deploy/cloudflare-config"))
@@ -366,7 +367,10 @@ export default function Deploy() {
           if (j.clientAlias) setClientAlias(j.clientAlias);
           if (j.region) setRegion(j.region);
           if (j.workerUrl) setDeployedUrl(j.workerUrl);
-          if (j.scriptName) setDeployedScriptName(j.scriptName);
+          if (j.scriptName) {
+            setDeployedScriptName(j.scriptName);
+            setWorkerName(j.scriptName);
+          }
           if (j.publicCodePath) setPublicCodePath(j.publicCodePath);
           if (j.decoyDomains?.length)
             setDecoyDomains(j.decoyDomains.concat(Array(10).fill("")).slice(0, 10));
@@ -555,6 +559,19 @@ export default function Deploy() {
   }
 
   async function handleDeploy() {
+    const trimmedWorkerName = workerName.trim();
+    if (!trimmedWorkerName) {
+      setDeployStatus("error");
+      setDeployMsg("Enter a worker name before deploying.");
+      return;
+    }
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(trimmedWorkerName)) {
+      setDeployStatus("error");
+      setDeployMsg(
+        "Worker name must be 1-63 characters, lowercase letters, numbers, and hyphens only, starting and ending with a letter or number.",
+      );
+      return;
+    }
     setDeployStatus("deploying");
     setDeployMsg("");
     setDeleteWorkerMsg("");
@@ -566,6 +583,7 @@ export default function Deploy() {
           template,
           region,
           clientAlias,
+          workerName: trimmedWorkerName,
           publicCodePath,
           decoyDomains: decoyDomains.filter(Boolean),
           kvBindingName: kvBindingName || undefined,
@@ -580,6 +598,7 @@ export default function Deploy() {
         setDeployStatus("success");
         setDeployedUrl(j.url ?? "");
         setDeployedScriptName(j.scriptName ?? "");
+        if (j.scriptName) setWorkerName(j.scriptName);
         setDeployMsg(j.url ?? "Deployed successfully.");
       } else {
         setDeployStatus("error");
@@ -1462,6 +1481,46 @@ export default function Deploy() {
               )}
             </div>
 
+            {/* Worker Name */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Worker Name
+              </label>
+              <input
+                type="text"
+                value={workerName}
+                onChange={(e) => setWorkerName(e.target.value)}
+                placeholder="my-worker-name"
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#0d1117",
+                  border: "1px solid #1e2d3d",
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#374151" }}>
+                The Cloudflare Worker script name. Lowercase letters, numbers, and
+                hyphens only; must start and end with a letter or number (max 63
+                characters). The public URL is{" "}
+                <code style={{ color: "#64748b" }}>
+                  {workerName.trim() || "<worker-name>"}.&lt;subdomain&gt;.workers.dev
+                </code>
+              </div>
+            </div>
+
             {/* Secret Code Path */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label
@@ -1932,6 +1991,7 @@ export default function Deploy() {
               Deployment Config
             </div>
             {[
+              { label: "Worker Name", value: workerName.trim() || "not set" },
               { label: "Template", value: selectedTemplate.label },
               { label: "Client", value: selectedClient?.name ?? clientAlias },
               {

@@ -486,6 +486,7 @@ router.post("/deploy", adminAuth, async (req, res) => {
     template,
     region,
     clientAlias,
+    workerName,
     publicCodePath,
     decoyDomains,
     kvBindingName,
@@ -493,6 +494,7 @@ router.post("/deploy", adminAuth, async (req, res) => {
     template?: string;
     region?: string;
     clientAlias?: string;
+    workerName?: string;
     publicCodePath?: string;
     decoyDomains?: string[];
     kvBindingName?: string;
@@ -500,6 +502,20 @@ router.post("/deploy", adminAuth, async (req, res) => {
 
   if (!template || !clientAlias) {
     res.status(400).json({ error: "template and clientAlias are required." });
+    return;
+  }
+
+  if (!workerName?.trim()) {
+    res.status(400).json({ error: "workerName is required." });
+    return;
+  }
+
+  const resolvedWorkerName = workerName.trim();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(resolvedWorkerName)) {
+    res.status(400).json({
+      error:
+        "workerName must be 1-63 characters, contain only lowercase letters, numbers, and hyphens, and start and end with a letter or number.",
+    });
     return;
   }
 
@@ -612,7 +628,7 @@ router.post("/deploy", adminAuth, async (req, res) => {
     workerApiSecret,
   });
 
-  const scriptName = `devdoc-${template}`.replace(/[^a-z0-9-]/g, "-");
+  const scriptName = resolvedWorkerName;
 
   const metadataObj: Record<string, unknown> = {
     main_module: "worker.js",
